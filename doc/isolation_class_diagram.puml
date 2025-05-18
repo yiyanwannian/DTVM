@@ -1,0 +1,97 @@
+@startuml DTVM隔离环境类图
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  ClassBackgroundColor #ECF0F1
+  ClassBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义类
+class RuntimeObject<T> {
+  #RT: Runtime&
+  +RuntimeObject(RT: Runtime&)
+  +getRuntime(): Runtime*
+}
+
+class Isolation {
+  -WniEnv: WNIEnvInternal
+  -InstancePool: unordered_map<Instance*, InstanceUniquePtr>
+  +newIsolation(RT: Runtime&): IsolationUniquePtr
+  +createInstance(Mod: Module&, GasLimit: uint64_t): MayBe<Instance*>
+  +deleteInstance(Inst: Instance*): bool
+  +initWasi(): bool
+  +initNativeModuleCtx(ModName: WASMSymbol): bool
+}
+
+class Runtime {
+  -Isolations: unordered_map<Isolation*, IsolationUniquePtr>
+  +createManagedIsolation(): Isolation*
+  +deleteManagedIsolation(Iso: Isolation*): bool
+  +createUnmanagedIsolation(): IsolationUniquePtr
+}
+
+class Instance {
+  -Iso: Isolation*
+  -Mod: Module*
+  -Functions: FunctionInstance*
+  -Globals: GlobalInstance*
+  -Tables: TableInstance*
+  -Memories: MemoryInstance*
+  -GasLimit: uint64_t
+  -GasUsed: uint64_t
+  -Error: Error
+  +newInstance(Iso: Isolation&, Mod: Module&, GasLimit: uint64_t): InstanceUniquePtr
+}
+
+class WNIEnvInternal {
+  +_env: WNIEnv
+  +_isolation: Isolation*
+}
+
+class WNIEnv {
+  +_functions: WNINativeInterface*
+  +_linear_mem_base: uintptr_t
+  +_linear_mem_end: uintptr_t
+  +_linear_mem_size: uint64_t
+  +_vmctx: void*
+  +_user_defined_ctx: void*
+}
+
+class Module {
+  +getNumTotalFunctions(): uint32_t
+  +getNumTotalGlobals(): uint32_t
+  +getNumTotalTables(): uint32_t
+  +getNumTotalMemories(): uint32_t
+  +getLayout(): InstanceLayout&
+}
+
+' 定义关系
+RuntimeObject <|-- Isolation : 继承
+Runtime "1" *-- "0..*" Isolation : 管理
+Isolation "1" *-- "0..*" Instance : 管理
+Instance "1" o-- "1" Module : 关联
+Instance "1" o-- "1" Isolation : 关联
+Isolation "1" *-- "1" WNIEnvInternal : 包含
+WNIEnvInternal "1" *-- "1" WNIEnv : 包含
+
+' 添加注释
+note bottom of Isolation
+  隔离环境是DTVM安全执行模型的核心组件，
+  负责提供WebAssembly实例的隔离执行环境
+end note
+
+note right of WNIEnv
+  WebAssembly原生接口环境，
+  提供与主机环境交互的接口
+end note
+
+note right of Instance
+  实例池存储由隔离环境创建的
+  所有WebAssembly实例
+end note
+
+@enduml

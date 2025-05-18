@@ -1,0 +1,124 @@
+@startuml 内存桶模式类图
+
+' 使用中文标题
+title DTVM内存桶模式类图
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  ClassBackgroundColor #ECF0F1
+  ClassBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义枚举
+enum WasmMemoryDataType {
+  WM_MEMORY_DATA_TYPE_NO_DATA = 0
+  WM_MEMORY_DATA_TYPE_MALLOC = 1
+  WM_MEMORY_DATA_TYPE_SINGLE_MMAP = 2
+  WM_MEMORY_DATA_TYPE_BUCKET_MMAP = 3
+}
+
+' 定义结构体
+class WasmMemoryData {
+  +Type: WasmMemoryDataType
+  +MemoryData: uint8_t*
+  +MemorySize: size_t
+  +NeedMprotect: bool
+}
+
+class WasmMemoryAllocatorOptions {
+  +UseMmap: bool
+  +MemoryIndex: uint32_t
+}
+
+class WasmMemoryBucketSlice {
+  +Address: uint8_t*
+  +BucketBegin: uint8_t*
+  +BucketSize: size_t
+}
+
+' 定义类
+class MmapBucketInstance {
+  -MmapAddr: uint8_t*
+  -ItemsUsedSizes: array<size_t, 10>
+  -NextOffset: size_t
+  -Size: size_t
+  -BucketItemSize: size_t
+  -MmapSize: size_t
+  +MmapBucketInstance(Addr: uint8_t*, BucketSize: size_t, ItemSize: size_t, BucketMmapSize: size_t)
+}
+
+class WasmMemoryAllocator {
+  -CurModule: Module*
+  -CurRuntime: Runtime*
+  -DefaultMemoryType: WasmMemoryDataType
+  -UseMmap: bool
+  -MmapMemoryInitFileSize: size_t
+  -MmapMemoryBucketGrowMaxSize: size_t
+  -MmapMemoryInitFd: int
+  -MmapMemoryFilepath: char*
+  -MmapAddresses: unordered_set<uint8_t*>*
+  -MemoryAddrToMmapAddr: unordered_map<uint8_t*, uint8_t*>*
+  -MmapBucketsFreedCount: unordered_map<uint8_t*, size_t*>*
+  -MmapBucketSize: size_t
+  -MmapBucketItemSize: size_t
+  -BucketLock: Mutex
+  -ActiveBuckets: unordered_map<uint8_t*, shared_ptr<MmapBucketInstance>>
+  -BucketInstanceForAllocate: MmapBucketInstance*
+  +WasmMemoryAllocator(Mod: Module*, Options: WasmMemoryAllocatorOptions*)
+  +checkWasmMemoryCanUseMmap(): bool
+  +allocInitWasmMemory(BucketAllocSand: uint8_t*, MemorySize: size_t, ThisInstanceUseMmap: bool, FilledInitData: bool*, ErrorBuf: char*, ErrorBufSize: uint32_t): WasmMemoryData
+  +enlargeWasmMemory(OldMemoryData: WasmMemoryData&, NewMemorySize: size_t): WasmMemoryData
+  +freeWasmMemory(WasmMemoryData: WasmMemoryData&): void
+  +allocateNonBucketMemory(MemorySize: size_t): WasmMemoryData
+  +reallocateNonBucketMemoryAndFillZerosToNew(OldMemoryData: WasmMemoryData&, NewMemorySize: size_t): WasmMemoryData
+  +mprotectReadWriteWasmMemoryData(Data: WasmMemoryData&, UnprotectBucket: bool): void
+  +getDefaultMemoryType(): WasmMemoryDataType
+  -internalFreeWasmMemory(Data: WasmMemoryData&): void
+  -getOrCreateMmapSpace(BucketAllocSand: uint8_t*, InitLinearMemorySize: size_t): WasmMemoryBucketSlice
+}
+
+class MemoryInstance {
+  +CurPages: uint32_t
+  +MaxPages: uint32_t
+  +MemSize: uint64_t
+  +MemBase: uint8_t*
+  +MemEnd: uint8_t*
+  +Kind: WasmMemoryDataType
+  +getWasmMemoryData(): WasmMemoryData
+}
+
+class Instance {
+  -Iso: Isolation*
+  -Mod: Module*
+  -NumTotalGlobals: uint32_t
+  -NumTotalMemories: uint32_t
+  -NumTotalTables: uint32_t
+  -NumTotalFunctions: uint32_t
+  -Functions: FunctionInstance*
+  -Globals: GlobalInstance*
+  -GlobalVarData: uint8_t*
+  -Tables: TableInstance*
+  -Memories: MemoryInstance*
+  -GasLimit: uint64_t
+  -GasUsed: uint64_t
+  -Error: Error
+  -MemDataKind: WasmMemoryDataType
+  -DataSegsInited: bool
+  +protectMemory(): void
+  +getWasmMemoryAllocator(): WasmMemoryAllocator*
+}
+
+' 定义关系
+WasmMemoryData --> WasmMemoryDataType
+Instance --> MemoryInstance
+Instance --> WasmMemoryAllocator
+MemoryInstance --> WasmMemoryDataType
+WasmMemoryAllocator --> MmapBucketInstance
+WasmMemoryAllocator --> WasmMemoryBucketSlice
+WasmMemoryAllocator --> WasmMemoryData
+
+@enduml

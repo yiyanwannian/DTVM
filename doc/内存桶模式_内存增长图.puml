@@ -1,0 +1,69 @@
+@startuml 内存桶模式内存增长
+
+' 使用中文标题
+title DTVM内存桶模式内存增长流程
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  SequenceArrowThickness 2
+  SequenceLifeLineBorderColor #3498DB
+  SequenceLifeLineBackgroundColor #ECF0F1
+  ParticipantBackgroundColor #ECF0F1
+  ParticipantBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义参与者
+participant "WebAssembly代码" as Wasm
+participant "Instance" as Inst
+participant "WasmMemoryAllocator" as Allocator
+participant "操作系统" as OS
+
+' 定义序列
+Wasm -> Inst : 1. 执行memory.grow指令
+activate Inst
+
+Inst -> Allocator : 2. 调用enlargeWasmMemory
+activate Allocator
+
+Allocator -> Allocator : 3. 检查内存类型和新大小
+note right: 检查是否使用内存桶模式\n以及新大小是否在限制范围内
+
+alt 使用内存桶且新大小在限制范围内
+  Allocator -> Allocator : 4a. 更新内存大小
+  note right: 不需要重新分配内存，\n只需更新MemorySize字段
+  
+  Allocator --> Inst : 返回更新后的内存数据
+else 需要重新分配内存
+  alt 旧内存使用内存桶或单一映射
+    Allocator -> Allocator : 4b.1. 标记需要释放旧内存
+    
+    Allocator -> OS : 4b.2. 使用mmap分配新内存
+    OS --> Allocator : 返回映射地址
+    
+    Allocator -> Allocator : 4b.3. 复制旧数据到新内存
+    
+    Allocator -> OS : 4b.4. 使用munmap释放旧内存
+    
+    Allocator --> Inst : 返回新分配的内存数据
+  else 旧内存使用普通内存
+    Allocator -> Allocator : 4c.1. 使用realloc重新分配内存
+    
+    Allocator -> Allocator : 4c.2. 初始化新增部分为零
+    
+    Allocator --> Inst : 返回重新分配的内存数据
+  end
+end
+
+deactivate Allocator
+
+Inst -> Inst : 5. 更新内存实例
+note right: 更新MemBase、MemSize、\nMemEnd和Kind属性
+
+Inst --> Wasm : 返回增长结果
+deactivate Inst
+
+@enduml

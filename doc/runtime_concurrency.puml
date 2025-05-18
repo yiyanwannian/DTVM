@@ -1,0 +1,149 @@
+@startuml DTVM Runtime并发支持
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  ActivityBackgroundColor #ECF0F1
+  ActivityBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义多线程并行编译
+rectangle "多线程并行编译" {
+  rectangle "线程池" as ThreadPool {
+    rectangle "线程1" as Thread1 {
+      "编译函数1"
+    }
+    
+    rectangle "线程2" as Thread2 {
+      "编译函数2"
+    }
+    
+    rectangle "线程3" as Thread3 {
+      "编译函数3"
+    }
+    
+    rectangle "..." as ThreadDots
+    
+    rectangle "线程N" as ThreadN {
+      "编译函数N"
+    }
+  }
+  
+  rectangle "任务队列" as TaskQueue {
+    "函数编译任务..."
+  }
+  
+  rectangle "编译结果" as CompileResults {
+    "编译后的函数代码..."
+  }
+}
+
+' 定义延迟编译模式
+rectangle "延迟编译模式" {
+  rectangle "初始化阶段" as InitPhase {
+    "只编译必要的函数"
+  }
+  
+  rectangle "执行阶段" as ExecPhase {
+    rectangle "函数调用" as FuncCall {
+      "调用函数X"
+    }
+    
+    rectangle "检查编译状态" as CheckCompile {
+      "函数X是否已编译?"
+    }
+    
+    rectangle "编译函数" as CompileFunc {
+      "编译函数X"
+    }
+    
+    rectangle "执行函数" as ExecFunc {
+      "执行函数X"
+    }
+  }
+  
+  FuncCall -> CheckCompile
+  CheckCompile -> CompileFunc : 否
+  CompileFunc -> ExecFunc
+  CheckCompile -> ExecFunc : 是
+}
+
+' 定义多种执行模式
+rectangle "多种执行模式" {
+  rectangle "解释器模式" as InterpMode {
+    "- 启动快速\n- 执行较慢\n- 无需编译\n- 适合短期运行"
+  }
+  
+  rectangle "单通道编译模式" as SinglepassMode {
+    "- 编译速度快\n- 执行性能适中\n- 生成代码质量一般\n- 适合中等复杂度"
+  }
+  
+  rectangle "多通道编译模式" as MultipassMode {
+    "- 编译时间长\n- 执行性能最佳\n- 生成代码质量高\n- 适合长期运行"
+  }
+}
+
+' 定义多实例部署
+rectangle "多实例部署" {
+  rectangle "DTVM实例1" as DTVMInstance1 {
+    rectangle "内存桶1" as MemBucket1 {
+      "10个WebAssembly实例"
+    }
+  }
+  
+  rectangle "DTVM实例2" as DTVMInstance2 {
+    rectangle "内存桶2" as MemBucket2 {
+      "10个WebAssembly实例"
+    }
+  }
+  
+  rectangle "DTVM实例3" as DTVMInstance3 {
+    rectangle "内存桶3" as MemBucket3 {
+      "10个WebAssembly实例"
+    }
+  }
+  
+  rectangle "..." as DTVMDots
+  
+  rectangle "DTVM实例M" as DTVMInstanceM {
+    rectangle "内存桶M" as MemBucketM {
+      "10个WebAssembly实例"
+    }
+  }
+  
+  rectangle "负载均衡器" as LoadBalancer {
+    "分发合约到不同的DTVM实例"
+  }
+  
+  LoadBalancer --> DTVMInstance1
+  LoadBalancer --> DTVMInstance2
+  LoadBalancer --> DTVMInstance3
+  LoadBalancer --> DTVMDots
+  LoadBalancer --> DTVMInstanceM
+}
+
+' 添加注释
+note bottom of ThreadPool
+  线程池并行编译WebAssembly函数，
+  显著提高编译性能
+end note
+
+note bottom of ExecPhase
+  延迟编译模式只在需要时才编译函数，
+  减少初始化时间，分散编译工作
+end note
+
+note bottom of MultipassMode
+  不同执行模式有不同的性能特点，
+  可根据需要选择最适合的模式
+end note
+
+note bottom of LoadBalancer
+  多实例部署可以线性扩展并发处理能力，
+  每个DTVM实例可以处理10个并发合约
+end note
+
+@enduml

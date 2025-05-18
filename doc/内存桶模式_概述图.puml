@@ -1,0 +1,47 @@
+@startuml 内存桶模式概述
+
+' 使用中文标题
+title DTVM内存桶模式（Bucket Mode）概述
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  ComponentBackgroundColor #ECF0F1
+  ComponentBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义组件
+component "WebAssembly模块" as WasmModule
+component "内存分配器\n(WasmMemoryAllocator)" as Allocator
+component "内存桶实例\n(MmapBucketInstance)" as Bucket
+component "WebAssembly实例1" as Instance1
+component "WebAssembly实例2" as Instance2
+component "WebAssembly实例3" as Instance3
+
+' 定义关系
+WasmModule --> Allocator : 1. 加载模块
+Allocator --> Bucket : 2. 创建内存桶
+Bucket --> Instance1 : 3a. 分配桶项1
+Bucket --> Instance2 : 3b. 分配桶项2
+Bucket --> Instance3 : 3c. 分配桶项3
+
+' 添加注释
+note right of Allocator
+  内存分配器负责创建和管理内存桶，
+  并从中分配内存给WebAssembly实例
+end note
+
+note right of Bucket
+  内存桶是一块预分配的大内存，
+  被划分为多个固定大小的桶项
+end note
+
+note right of Instance1
+  每个WebAssembly实例获得一个桶项
+  作为其线性内存空间
+end note
+
+@enduml

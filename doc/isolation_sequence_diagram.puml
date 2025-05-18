@@ -1,0 +1,126 @@
+@startuml DTVM隔离环境创建与使用流程
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  SequenceArrowThickness 2
+  SequenceLifeLineBorderColor #3498DB
+  SequenceLifeLineBackgroundColor #ECF0F1
+  ParticipantBackgroundColor #ECF0F1
+  ParticipantBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+title DTVM隔离环境创建与使用流程
+
+' 定义参与者
+participant "应用程序" as App
+participant "Runtime" as Runtime
+participant "Isolation" as Isolation
+participant "Module" as Module
+participant "Instance" as Instance
+participant "HostModule" as HostModule
+
+' 定义序列
+App -> Runtime : 1. 创建Runtime\nnewRuntime()
+activate Runtime
+
+App -> Runtime : 2. 加载WebAssembly模块\nloadModule(filename)
+activate Runtime
+  Runtime -> Module : 2.1 创建Module\nnewModule()
+  Module --> Runtime : 返回Module实例
+  Runtime --> App : 返回Module指针
+deactivate Runtime
+
+App -> Runtime : 3. 创建隔离环境\ncreateManagedIsolation()
+activate Runtime
+  Runtime -> Isolation : 3.1 创建Isolation\nnewIsolation()
+  activate Isolation
+    Isolation -> Runtime : 3.2 分配内存\nallocate(sizeof(Isolation))
+    Runtime --> Isolation : 返回内存指针
+    Isolation -> Isolation : 3.3 构造Isolation对象\nnew (Buf) Isolation(RT)
+    Isolation --> Runtime : 返回IsolationUniquePtr
+  deactivate Isolation
+  
+  Runtime -> Runtime : 3.4 添加到Isolations映射\nIsolations.emplace(RawIso, Iso)
+  Runtime --> App : 返回Isolation指针
+deactivate Runtime
+
+App -> Isolation : 4. 初始化WASI\ninitWasi()
+activate Isolation
+  Isolation -> Isolation : 4.1 调用initNativeModuleCtx\ninitNativeModuleCtx(wasi_snapshot_preview1)
+  activate Isolation
+    Isolation -> Runtime : 4.2 解析主机模块\nresolveHostModule(ModName)
+    Runtime -> HostModule : 4.3 获取主机模块
+    HostModule --> Runtime : 返回HostModule指针
+    Runtime --> Isolation : 返回HostModule指针
+    
+    Isolation -> HostModule : 4.4 获取主机函数列表\ngetHostFuntionList()
+    HostModule --> Isolation : 返回函数列表
+    
+    Isolation -> Isolation : 4.5 查找init_ctx函数
+    
+    alt 找到init_ctx函数
+      Isolation -> HostModule : 4.6 调用init_ctx函数\nInitCtxFn(...)
+      HostModule --> Isolation : 返回上下文指针
+      
+      Isolation -> Isolation : 4.7 设置WNIEnv的用户上下文\nEnv->_user_defined_ctx = Ctx
+    end
+    
+    Isolation --> Isolation : 返回初始化结果
+  deactivate Isolation
+  
+  Isolation --> App : 返回初始化结果
+deactivate Isolation
+
+App -> Isolation : 5. 创建WebAssembly实例\ncreateInstance(module, gasLimit)
+activate Isolation
+  Isolation -> Instance : 5.1 创建Instance\nnewInstance()
+  activate Instance
+    Instance -> Instance : 5.2 初始化实例
+    Instance --> Isolation : 返回InstanceUniquePtr
+  deactivate Instance
+  
+  Isolation -> Isolation : 5.3 添加到实例池\nInstancePool.emplace(RawInst, Inst)
+  
+  Isolation -> Isolation : 5.4 设置WNI环境
+  note right
+    设置线性内存基址、大小和结束地址
+    Env->_linear_mem_base = MemInst.MemBase
+    Env->_linear_mem_size = MemInst.MemSize
+    Env->_linear_mem_end = Env->_linear_mem_base + Env->_linear_mem_size
+  end note
+  
+  Isolation --> App : 返回Instance指针
+deactivate Isolation
+
+App -> Runtime : 6. 调用WebAssembly函数\ncallWasmFunction(instance, funcName, args, results)
+activate Runtime
+  Runtime -> Instance : 6.1 执行WebAssembly函数
+  Instance --> Runtime : 返回执行结果
+  Runtime --> App : 返回执行结果
+deactivate Runtime
+
+App -> Isolation : 7. 删除WebAssembly实例\ndeleteInstance(instance)
+activate Isolation
+  Isolation -> Isolation : 7.1 从实例池中移除\nInstancePool.erase(Inst)
+  note right
+    当InstanceUniquePtr被移除时，
+    Instance对象会自动销毁
+  end note
+  Isolation --> App : 返回删除结果
+deactivate Isolation
+
+App -> Runtime : 8. 删除隔离环境\ndeleteManagedIsolation(isolation)
+activate Runtime
+  Runtime -> Runtime : 8.1 从Isolations映射中移除\nIsolations.erase(Iso)
+  note right
+    当IsolationUniquePtr被移除时，
+    Isolation对象会自动销毁
+  end note
+  Runtime --> App : 返回删除结果
+deactivate Runtime
+
+@enduml

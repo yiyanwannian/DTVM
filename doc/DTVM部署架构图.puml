@@ -1,0 +1,101 @@
+@startuml DTVM部署架构图
+
+' 使用中文标题
+title DTVM部署架构图
+
+' 设置样式
+skinparam {
+  ArrowColor #2C3E50
+  BackgroundColor #FFFFFF
+  ComponentBackgroundColor #ECF0F1
+  ComponentBorderColor #3498DB
+  DatabaseBackgroundColor #F5EEF8
+  DatabaseBorderColor #8E44AD
+  CloudBackgroundColor #E8F8F5
+  CloudBorderColor #16A085
+  ActorBackgroundColor #FDEDEC
+  ActorBorderColor #E74C3C
+  NodeBackgroundColor #FEF9E7
+  NodeBorderColor #F39C12
+}
+
+' 定义组件
+actor "开发者" as Developer
+actor "用户" as User
+
+cloud "开发环境" as DevEnv {
+  component "WebAssembly编译器" as WasmCompiler
+  component "源代码" as SourceCode
+  component "开发工具" as DevTools
+}
+
+node "应用服务器" as AppServer {
+  component "应用程序" as Application
+  component "DTVM运行时" as DTVMRuntime
+  database "WebAssembly模块库" as WasmModuleStore
+}
+
+node "边缘设备" as EdgeDevice {
+  component "轻量级应用" as LightApp
+  component "DTVM运行时(嵌入式)" as EmbeddedDTVM
+}
+
+node "区块链节点" as BlockchainNode {
+  component "区块链客户端" as BlockchainClient
+  component "DTVM运行时(安全模式)" as SecureDTVM
+  database "智能合约存储" as ContractStore
+}
+
+node "SGX安全环境" as SGXEnv {
+  component "可信应用" as TrustedApp
+  component "DTVM运行时(SGX)" as SGXDTVM
+  database "加密数据" as EncryptedData
+}
+
+' 定义关系
+Developer --> DevEnv : 开发WebAssembly模块
+SourceCode --> WasmCompiler : 编译为WebAssembly
+WasmCompiler --> WasmModuleStore : 部署模块
+
+Application --> DTVMRuntime : 使用
+DTVMRuntime --> WasmModuleStore : 加载模块
+
+User --> Application : 使用
+User --> LightApp : 使用
+
+LightApp --> EmbeddedDTVM : 使用
+EmbeddedDTVM --> WasmModuleStore : 远程加载模块
+
+BlockchainClient --> SecureDTVM : 使用
+SecureDTVM --> ContractStore : 加载合约
+
+TrustedApp --> SGXDTVM : 使用
+SGXDTVM --> EncryptedData : 安全访问
+
+' 添加注释
+note right of DevEnv
+  开发环境中，开发者使用各种语言
+  编写代码，并编译为WebAssembly模块
+end note
+
+note right of AppServer
+  应用服务器中，DTVM运行时加载
+  WebAssembly模块并执行业务逻辑
+end note
+
+note right of EdgeDevice
+  边缘设备中，轻量级DTVM运行时
+  执行WebAssembly模块，实现边缘计算
+end note
+
+note right of BlockchainNode
+  区块链节点中，DTVM安全运行时
+  执行智能合约，确保确定性执行
+end note
+
+note right of SGXEnv
+  SGX安全环境中，DTVM SGX运行时
+  在可信执行环境中安全执行敏感代码
+end note
+
+@enduml

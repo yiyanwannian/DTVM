@@ -1,0 +1,249 @@
+@startuml 合约执行内部流程图
+
+' 使用中文标题
+title 智能合约执行内部流程图
+
+' 设置样式
+skinparam {
+  ArrowColor #2C3E50
+  BackgroundColor #FFFFFF
+  ActivityBackgroundColor #ECF0F1
+  ActivityBorderColor #3498DB
+  ActivityDiamondBackgroundColor #F8F9FA
+  ActivityDiamondBorderColor #2980B9
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义活动
+|外部|
+start
+:合约源码编译为WebAssembly;
+note right
+  使用外部编译工具链:
+  - Rust: cargo build --target wasm32-unknown-unknown
+  - C/C++: emscripten/clang
+  - AssemblyScript: asc
+end note
+
+|运行时管理器 (src/runtime/runtime.cpp)|
+:创建运行时;
+note right
+  ZenRuntime::new()
+  Runtime::initRuntime()
+end note
+
+:加载WebAssembly模块;
+note right
+  ZenRuntime::load_module()
+  Runtime::loadModule()
+end note
+
+|代码持有器 (src/runtime/codeholder.cpp)|
+:读取WebAssembly文件;
+note right
+  CodeHolder::newFileCodeHolder()
+  读取.wasm文件内容
+end note
+
+|模块加载器 (src/action/module_loader.cpp)|
+:验证模块头部;
+note right
+  ModuleLoader::loadModuleHeader()
+  验证魔数和版本
+end note
+
+:解析类型段;
+note right
+  ModuleLoader::loadTypeSection()
+  解析函数签名
+end note
+
+:解析导入段;
+note right
+  ModuleLoader::loadImportSection()
+  解析导入的函数、内存和表
+end note
+
+:解析函数段;
+note right
+  ModuleLoader::loadFunctionSection()
+  解析函数定义
+end note
+
+:解析表段;
+note right
+  ModuleLoader::loadTableSection()
+  解析表定义
+end note
+
+:解析内存段;
+note right
+  ModuleLoader::loadMemorySection()
+  解析内存定义
+end note
+
+:解析全局段;
+note right
+  ModuleLoader::loadGlobalSection()
+  解析全局变量
+end note
+
+:解析导出段;
+note right
+  ModuleLoader::loadExportSection()
+  解析导出的函数、内存和表
+end note
+
+:解析元素段;
+note right
+  ModuleLoader::loadElementSection()
+  解析表初始化数据
+end note
+
+:解析代码段;
+note right
+  ModuleLoader::loadCodeSection()
+  解析函数体
+end note
+
+:解析数据段;
+note right
+  ModuleLoader::loadDataSection()
+  解析内存初始化数据
+end note
+
+|编译器 (src/action/compiler.cpp)|
+:根据运行模式选择编译方式;
+note right
+  action::performJITCompile()
+  根据Runtime::getConfig().Mode选择编译器
+end note
+
+if (编译模式) then (解释器模式)
+  :跳过编译;
+  note right
+    RunMode::InterpMode
+    直接解释执行WebAssembly字节码
+  end note
+else (JIT模式)
+  if (JIT类型) then (单通道)
+    |单通道编译器 (src/singlepass/singlepass.cpp)|
+    :单通道编译;
+    note right
+      singlepass::JITCompiler::compile()
+      一次性将WebAssembly编译为本地代码
+    end note
+  else (多通道)
+    |多通道编译器 (src/compiler/compiler.cpp)|
+    :多通道编译;
+    note right
+      COMPILER::EagerJITCompiler::compile()
+      或LazyJITCompiler::precompile()
+      多阶段优化编译
+    end note
+  endif
+endif
+
+|隔离环境 (src/runtime/isolation.cpp)|
+:创建隔离环境;
+note right
+  ZenRuntime::new_isolation()
+  Isolation::newIsolation()
+end note
+
+:创建实例;
+note right
+  ZenModule::new_instance()
+  Isolation::createInstance()
+end note
+
+|实例化器 (src/action/instantiator.cpp)|
+:实例化全局变量;
+note right
+  Instantiator::instantiateGlobals()
+  初始化全局变量
+end note
+
+:实例化函数;
+note right
+  Instantiator::instantiateFunctions()
+  设置函数实例
+end note
+
+:实例化表;
+note right
+  Instantiator::instantiateTables()
+  初始化函数表
+end note
+
+:实例化内存;
+note right
+  Instantiator::instantiateMemories()
+  分配和初始化内存
+end note
+
+:初始化数据段;
+note right
+  将数据段内容复制到内存
+end note
+
+:执行start函数;
+note right
+  如果模块有start函数，则执行
+  Runtime::callWasmFunction()
+end note
+
+|执行引擎|
+:调用合约函数;
+note right
+  ZenInstance::call_wasm_func()
+  Runtime::callWasmFunction()
+end note
+
+if (执行模式) then (解释器模式)
+  |解释器 (src/action/interpreter.cpp)|
+  :解释执行;
+  note right
+    BaseInterpreterImpl::interpret()
+    解释执行WebAssembly字节码
+  end note
+else (JIT模式)
+  |JIT执行器|
+  :执行编译后的本地代码;
+  note right
+    直接调用编译后的机器码
+  end note
+endif
+
+|Gas计量系统 (src/runtime/gas.h)|
+:消耗Gas;
+note right
+  在执行过程中消耗Gas
+  防止无限循环和资源滥用
+end note
+
+if (Gas耗尽?) then (是)
+  :抛出Gas耗尽异常;
+  note right
+    Instance::setExecutionError()
+    设置错误信息
+  end note
+  :终止执行;
+else (否)
+  :继续执行;
+endif
+
+|运行时管理器 (src/runtime/runtime.cpp)|
+:获取执行结果;
+note right
+  处理返回值
+  转换为TypedValue
+end note
+
+|外部|
+:返回合约执行结果;
+
+stop
+
+@enduml

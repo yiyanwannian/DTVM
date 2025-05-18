@@ -1,0 +1,135 @@
+@startuml DTVM命令行工具执行流程图
+
+' 使用中文标题
+title DTVM命令行工具执行流程图
+
+' 设置样式
+skinparam {
+  ArrowColor #2C3E50
+  BackgroundColor #FFFFFF
+  ActivityBackgroundColor #ECF0F1
+  ActivityBorderColor #3498DB
+  ActivityDiamondBackgroundColor #F8F9FA
+  ActivityDiamondBorderColor #2980B9
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义活动
+start
+
+:创建命令行解析器 (CLIParser);
+note right
+  std::unique_ptr<CLI::App> CLIParser;
+  CLIParser = std::make_unique<CLI::App>("ZetaEngine Command Line Interface\\n", "dtvm");
+  src/cli/dtvm.cpp:55-58
+end note
+
+:添加命令行选项;
+note right
+  CLIParser->add_option("WASM_FILE", WasmFilename, "WASM filename")->required();
+  CLIParser->add_option("-m,--mode", Config.Mode, "Running mode");
+  CLIParser->add_option("-f,--function", FuncName, "Entry function name");
+  CLIParser->add_option("--gas-limit", GasLimit, "Gas limit");
+  src/cli/dtvm.cpp:98-117
+end note
+
+:解析命令行参数;
+note right
+  CLI11_PARSE(*CLIParser, argc, argv);
+  src/cli/dtvm.cpp:143
+end note
+
+:设置日志级别;
+note right
+  zen::setGlobalLogger(createConsoleLogger("dtvm_cli_logger", LogLevel));
+  src/cli/dtvm.cpp:150
+end note
+
+:创建运行时环境;
+note right
+  std::unique_ptr<Runtime> RT = Runtime::newRuntime(Config);
+  src/cli/dtvm.cpp:157
+end note
+
+if (启用WASI) then (是)
+  :设置WASI参数;
+  note right
+    RT->setWASIArgs(WasmFilename, Args);
+    RT->setWASIEnvs(Envs);
+    RT->setWASIDirs(Dirs);
+    src/cli/dtvm.cpp:165-167
+  end note
+
+  :加载WASI模块;
+  note right
+    HostModule *WASIMod = LOAD_HOST_MODULE(RT, zen::host, wasi_snapshot_preview1);
+    src/cli/dtvm.cpp:168
+  end note
+endif
+
+if (启用环境模块) then (是)
+  :加载环境模块;
+  note right
+    HostModule *EnvMod = LOAD_HOST_MODULE(RT, zen::host, env);
+    src/cli/dtvm.cpp:176
+  end note
+endif
+
+:加载WebAssembly模块;
+note right
+  MayBe<Module *> ModRet = RT->loadModule(WasmFilename, ActualEntryHint);
+  Module *Mod = *ModRet;
+  src/cli/dtvm.cpp:185-193
+end note
+
+:创建隔离环境;
+note right
+  Isolation *Iso = RT->createManagedIsolation();
+  src/cli/dtvm.cpp:196
+end note
+
+:创建WebAssembly实例;
+note right
+  MayBe<Instance *> InstRet = Iso->createInstance(*Mod, GasLimit);
+  Instance *Inst = *InstRet;
+  src/cli/dtvm.cpp:203-211
+end note
+
+if (指定了函数名) then (是)
+  :调用指定函数;
+  note right
+    bool CallRet = RT->callWasmFunction(*Inst, FuncName, Args, Results);
+    src/cli/dtvm.cpp:218
+  end note
+else (否)
+  :调用main函数;
+  note right
+    bool CallRet = RT->callWasmMain(*Inst, Results);
+    src/cli/dtvm.cpp:232
+  end note
+endif
+
+:打印执行结果;
+note right
+  printTypedValueArray(Results);
+  src/cli/dtvm.cpp:228
+end note
+
+if (启用基准测试) then (是)
+  :执行额外的编译和执行;
+  note right
+    用于性能测试
+    src/cli/dtvm.cpp:244-300
+  end note
+endif
+
+:输出统计信息;
+note right
+  RT->getStatistics().report();
+  src/cli/dtvm.cpp:30
+end note
+
+stop
+
+@enduml

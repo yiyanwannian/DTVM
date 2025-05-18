@@ -1,0 +1,182 @@
+@startuml DTVM组件关系图
+
+' 使用中文标题
+title DTVM组件关系图
+
+' 设置样式
+skinparam {
+  ArrowColor #2C3E50
+  BackgroundColor #FFFFFF
+  ClassBackgroundColor #ECF0F1
+  ClassBorderColor #3498DB
+  PackageBackgroundColor #F8F9FA
+  PackageBorderColor #2980B9
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义类和接口
+package "核心类 (rust_crate/src/core)" {
+  class ZenRuntime {
+    // rust_crate/src/core/runtime.rs
+    +new(config: Option<ZenRuntimeConfig>): ZenRuntime
+    +load_module(path: &str): Result<ZenModule>
+    +load_module_from_bytes(name: &str, bytes: &[u8]): Result<ZenModule>
+    +new_isolation(): Result<ZenIsolation>
+    +create_host_module_desc(name: &str, descs: Vec<ZenHostFuncDesc>): ZenHostModuleDesc
+    +load_host_module(desc: ZenHostModuleDesc): ZenHostModule
+  }
+
+  class ZenModule {
+    // rust_crate/src/core/module.rs
+    +new_instance(isolation: ZenIsolation, gas_limit: u64): Result<ZenInstance>
+  }
+
+  class ZenIsolation {
+    // rust_crate/src/core/isolation.rs
+    // 隔离环境属性和方法
+  }
+
+  class ZenInstance {
+    // rust_crate/src/core/instance.rs
+    +call_wasm_func(func_name: &str, args: &[ZenValue]): Result<Vec<ZenValue>>
+    +validate_wasm_addr(addr: u32, size: u32): bool
+    +get_host_memory(addr: u32): *const u8
+  }
+
+  enum ZenValue {
+    // rust_crate/src/core/types.rs
+    ZenI32Value(i32)
+    ZenI64Value(i64)
+    ZenF32Value(f32)
+    ZenF64Value(f64)
+  }
+
+  class ZenHostFuncDesc {
+    // rust_crate/src/core/host_module.rs
+    +name: String
+    +arg_types: Vec<ZenType>
+    +ret_types: Vec<ZenType>
+    +func_ptr: *const libc::c_void
+  }
+
+  enum ZenRunMode {
+    // rust_crate/src/core/extern.rs
+    ZenModeInterp
+    ZenModeSinglepass
+    ZenModeMultipass
+  }
+
+  class ZenRuntimeConfig {
+    // rust_crate/src/core/runtime.rs
+    +new(mode: ZenRunMode): ZenRuntimeConfig
+    // 其他配置选项
+  }
+}
+
+package "C API (src/entrypoint)" {
+  class ZenRuntimeExtern {
+    // src/entrypoint/zetaengine-c.h
+    // C API运行时
+  }
+
+  class ZenModuleExtern {
+    // src/entrypoint/zetaengine-c.h
+    // C API模块
+  }
+
+  class ZenIsolationExtern {
+    // src/entrypoint/zetaengine-c.h
+    // C API隔离环境
+  }
+
+  class ZenInstanceExtern {
+    // src/entrypoint/zetaengine-c.h
+    // C API实例
+  }
+
+  class ZenRuntimeConfigExtern {
+    // src/entrypoint/zetaengine-c.h
+    // C API运行时配置
+  }
+}
+
+package "主机函数 (src/host)" {
+  interface HostFunction {
+    // src/host/host_func.h
+    // 主机函数接口
+  }
+}
+
+package "WebAssembly模块 (src/common/wasm_defs)" {
+  class WasmModule {
+    // src/common/wasm_defs/module.h
+    // WebAssembly模块结构
+  }
+
+  class WasmFunction {
+    // src/common/wasm_defs/function.h
+    // WebAssembly函数
+  }
+
+  class WasmMemory {
+    // src/common/wasm_defs/memory.h
+    // WebAssembly内存
+  }
+
+  class WasmTable {
+    // src/common/wasm_defs/table.h
+    // WebAssembly表
+  }
+
+  class WasmGlobal {
+    // src/common/wasm_defs/global.h
+    // WebAssembly全局变量
+  }
+}
+
+' 定义关系
+ZenRuntime --> ZenModule : 创建
+ZenRuntime --> ZenIsolation : 创建
+ZenRuntime --> ZenHostFuncDesc : 使用
+ZenRuntime --> ZenRuntimeConfig : 配置
+
+ZenModule --> ZenInstance : 创建
+ZenModule --> WasmModule : 封装
+
+ZenInstance --> ZenValue : 使用
+ZenInstance --> WasmFunction : 调用
+ZenInstance --> WasmMemory : 访问
+ZenInstance --> WasmTable : 访问
+ZenInstance --> WasmGlobal : 访问
+ZenInstance --> HostFunction : 调用
+
+ZenRuntimeExtern <-- ZenRuntime : 封装
+ZenModuleExtern <-- ZenModule : 封装
+ZenIsolationExtern <-- ZenIsolation : 封装
+ZenInstanceExtern <-- ZenInstance : 封装
+ZenRuntimeConfigExtern <-- ZenRuntimeConfig : 封装
+
+' 添加注释
+note "Rust接口" as N1
+ZenRuntime .. N1
+ZenModule .. N1
+ZenIsolation .. N1
+ZenInstance .. N1
+ZenValue .. N1
+
+note "C语言接口" as N2
+ZenRuntimeExtern .. N2
+ZenModuleExtern .. N2
+ZenIsolationExtern .. N2
+ZenInstanceExtern .. N2
+ZenRuntimeConfigExtern .. N2
+
+note "WebAssembly标准组件" as N3
+WasmModule .. N3
+WasmFunction .. N3
+WasmMemory .. N3
+WasmTable .. N3
+WasmGlobal .. N3
+
+@enduml

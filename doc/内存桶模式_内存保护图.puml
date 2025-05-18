@@ -1,0 +1,66 @@
+@startuml 内存桶模式内存保护
+
+' 使用中文标题
+title DTVM内存桶模式内存保护机制
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  SequenceArrowThickness 2
+  SequenceLifeLineBorderColor #3498DB
+  SequenceLifeLineBackgroundColor #ECF0F1
+  ParticipantBackgroundColor #ECF0F1
+  ParticipantBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义参与者
+participant "Runtime" as RT
+participant "Instance" as Inst
+participant "WasmMemoryAllocator" as Allocator
+participant "操作系统" as OS
+participant "WebAssembly代码" as Wasm
+
+' 定义序列
+RT -> Inst : 1. 调用protectMemory
+activate Inst
+
+Inst -> Inst : 2. 检查内存类型
+note right: 检查是否使用内存桶模式\n或单一映射模式
+
+alt 使用内存桶或单一映射模式
+  Inst -> Allocator : 3a. 调用mprotectReadWriteWasmMemoryData
+  activate Allocator
+  
+  Allocator -> OS : 4a. 调用mprotect设置内存权限
+  note right: 设置为PROT_READ | PROT_WRITE
+  
+  OS --> Allocator : 返回结果
+  
+  Allocator --> Inst : 返回结果
+  deactivate Allocator
+end
+
+Inst --> RT : 返回结果
+deactivate Inst
+
+RT -> Wasm : 5. 执行WebAssembly代码
+
+alt WebAssembly代码访问有效内存
+  Wasm -> Wasm : 6a. 正常访问内存
+else WebAssembly代码访问越界内存
+  Wasm -> OS : 6b. 访问越界内存
+  
+  OS -> RT : 7b. 触发SIGSEGV信号
+  
+  RT -> RT : 8b. 捕获信号并处理异常
+  note right: 通过setjmp/longjmp机制\n捕获CPU异常并转换为错误
+  
+  RT -> Inst : 9b. 设置执行错误
+  
+  RT -> Wasm : 10b. 终止执行
+end
+
+@enduml

@@ -1,0 +1,121 @@
+@startuml 合约内存实例化流程图
+
+' 使用中文标题
+title DTVM合约内存实例化流程图
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  ActivityBackgroundColor #ECF0F1
+  ActivityBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义活动
+start
+
+:加载WebAssembly模块;
+note right
+  Module::newModule()
+  1. 分配Module对象内存
+  2. 解析WebAssembly字节码
+  3. 加载各个段(类型、函数、表等)
+end note
+
+:计算实例内存布局;
+note right
+  Module::InstanceLayout::compute()
+  1. 计算各组件大小
+  2. 计算总大小
+  3. 计算各组件偏移量
+end note
+
+:创建隔离环境;
+note right
+  Runtime::createManagedIsolation()
+  创建一个隔离环境，用于隔离不同合约实例
+end note
+
+:分配实例内存;
+note right
+  Instance::newInstance()
+  根据计算的布局分配一块连续内存
+  大小为Layout.TotalSize
+end note
+
+:构造Instance对象;
+note right
+  new (Buf) Instance(Iso, Mod, GasLimit)
+  在分配的内存上构造Instance对象
+end note
+
+:设置组件指针;
+note right
+  Inst->Functions = (FunctionInstance*)((uintptr_t)Buf + Layout.InstanceSize);
+  Inst->Globals = (GlobalInstance*)((uintptr_t)Inst->Functions + Layout.FuncInstancesSize);
+  ...
+  设置各组件的指针，指向内存中的相应位置
+end note
+
+:实例化全局变量;
+note right
+  Instantiator::instantiateGlobals()
+  1. 初始化全局变量实例数组
+  2. 初始化全局变量数据
+end note
+
+:实例化函数;
+note right
+  Instantiator::instantiateFunctions()
+  1. 初始化函数实例数组
+  2. 设置导入函数和内部函数
+end note
+
+:实例化表;
+note right
+  Instantiator::instantiateTables()
+  1. 初始化表实例数组
+  2. 分配表元素内存
+  3. 初始化表元素
+end note
+
+:实例化内存;
+note right
+  Instantiator::instantiateMemories()
+  1. 初始化内存实例数组
+  2. 分配线性内存
+  3. 设置内存基址和大小
+end note
+
+:初始化数据段;
+note right
+  Instantiator::initMemoryByDataSegments()
+  将模块中的数据段复制到线性内存中
+end note
+
+if (启用WASI) then (是)
+  :初始化WASI;
+  note right
+    Instantiator::instantiateWasi()
+    设置WASI环境，使合约能够访问系统资源
+  end note
+endif
+
+if (启用JIT) then (是)
+  :设置JIT相关数据;
+  note right
+    设置函数指针数组和函数类型索引数组
+  end note
+endif
+
+:返回实例指针;
+note right
+  返回创建的Instance对象指针
+  现在合约实例已准备好执行
+end note
+
+stop
+
+@enduml

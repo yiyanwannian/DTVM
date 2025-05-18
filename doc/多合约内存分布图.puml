@@ -1,0 +1,303 @@
+@startuml 多合约内存分布图
+
+' 使用中文标题
+title DTVM多合约运行时内存分布图
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  RectangleBackgroundColor #ECF0F1
+  RectangleBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义内存桶
+rectangle "内存桶 (8GB，内存映射大小)" {
+  ' 合约1的内存布局
+  rectangle "合约1内存空间 (最大1000页，约64MB)" as Contract1 {
+    rectangle "Instance对象" as Instance1 #D5F5E3 {
+      rectangle "基本字段" as Instance1Base {
+        "Iso: Isolation*\nMod: Module*\nNumTotalGlobals: uint32_t\nNumTotalMemories: uint32_t\nNumTotalTables: uint32_t\nNumTotalFunctions: uint32_t\nGasLimit: uint64_t\nGasUsed: uint64_t\nError: Error\nMemDataKind: WasmMemoryDataType"
+      }
+    }
+
+    rectangle "FunctionInstance数组" as Functions1 #D5F5E3 {
+      rectangle "导入函数" as ImportFuncs1 {
+        "函数1: print_i32\n- CodePtr: 0x12345678\n- NumParams: 1\n- ParamTypes: [I32]\n- NumReturns: 0\n- ReturnTypes: []"
+      }
+      rectangle "内部函数" as InternalFuncs1 {
+        "函数2: main\n- CodePtr: 0x23456789\n- JITCodePtr: 0x34567890\n- NumParams: 0\n- ParamTypes: []\n- NumReturns: 1\n- ReturnTypes: [I32]\n- NumLocals: 2\n- LocalTypes: [I32, I32]"
+
+        "函数3: add\n- CodePtr: 0x3456789A\n- JITCodePtr: 0x456789AB\n- NumParams: 2\n- ParamTypes: [I32, I32]\n- NumReturns: 1\n- ReturnTypes: [I32]\n- NumLocals: 0\n- LocalTypes: []"
+      }
+    }
+
+    rectangle "GlobalInstance数组" as Globals1 #D5F5E3 {
+      "全局变量1: counter\n- Type: I32\n- Mutable: true\n- Offset: 0"
+
+      "全局变量2: constant\n- Type: I32\n- Mutable: false\n- Offset: 4"
+    }
+
+    rectangle "全局变量数据" as GlobalData1 #D5F5E3 {
+       "counter: 0 (初始值)\nconstant: 42 (初始值)"
+    }
+
+    rectangle "TableInstance数组" as Tables1 #D5F5E3 {
+       "表1: funcref\n- CurSize: 4\n- MaxSize: 10\n- Elements: 指向表元素的指针"
+    }
+
+    rectangle "表元素" as TableElems1 #D5F5E3 {
+      "0: 函数索引2 (main)\n1: 函数索引3 (add)\n2: 0 (未初始化)\n3: 0 (未初始化)"
+    }
+
+    rectangle "MemoryInstance数组" as Memories1 #D5F5E3 {
+      "内存1:\n- CurPages: 1 (64KB)\n- MaxPages: 16 (1MB)\n- MemSize: 65536\n- MemBase: 指向线性内存的指针\n- MemEnd: MemBase + MemSize\n- Kind: WM_MEMORY_DATA_TYPE_BUCKET_MMAP"
+    }
+
+    rectangle "线性内存" as LinearMem1 #D5F5E3 {
+      rectangle "数据段1" as DataSeg1_1 {
+        "偏移量: 0\n内容: \"Hello, World!\""
+      }
+      rectangle "数据段2" as DataSeg1_2 {
+        "偏移量: 16\n内容: [1, 2, 3, 4, 5]"
+      }
+      rectangle "堆区" as Heap1 {
+        "动态分配的内存区域"
+      }
+      rectangle "栈区" as Stack1 {
+        "局部变量和函数调用栈"
+      }
+    }
+
+    ' 如果启用JIT
+    rectangle "函数指针数组" as FuncPtrs1 #D5F5E3 {
+      "函数1指针: 0x12345678\n函数2指针: 0x23456789\n函数3指针: 0x3456789A"
+    }
+
+    rectangle "函数类型索引数组" as FuncTypeIndexes1 #D5F5E3 {
+      "函数1类型索引: 0\n函数2类型索引: 1\n函数3类型索引: 2"
+    }
+  }
+
+  ' 合约2的内存布局
+  rectangle "合约2内存空间 (最大1000页，约64MB)" as Contract2 {
+    rectangle "Instance对象" as Instance2 #AED6F1 {
+      rectangle "基本字段" as Instance2Base {
+        "Iso: Isolation*\nMod: Module*\nNumTotalGlobals: uint32_t\nNumTotalMemories: uint32_t\nNumTotalTables: uint32_t\nNumTotalFunctions: uint32_t\nGasLimit: uint64_t\nGasUsed: uint64_t\nError: Error\nMemDataKind: WasmMemoryDataType"
+      }
+    }
+
+    rectangle "FunctionInstance数组" as Functions2 #AED6F1 {
+      rectangle "导入函数" as ImportFuncs2 {
+        "函数1: print_i32\n- CodePtr: 0x12345678\n- NumParams: 1\n- ParamTypes: [I32]\n- NumReturns: 0\n- ReturnTypes: []"
+
+        "函数2: storage_read\n- CodePtr: 0xABCDEF01\n- NumParams: 2\n- ParamTypes: [I32, I32]\n- NumReturns: 1\n- ReturnTypes: [I32]"
+
+        "函数3: storage_write\n- CodePtr: 0xBCDEF012\n- NumParams: 3\n- ParamTypes: [I32, I32, I32]\n- NumReturns: 0\n- ReturnTypes: []"
+      }
+      rectangle "内部函数" as InternalFuncs2 {
+        "函数4: init\n- CodePtr: 0x45678901\n- JITCodePtr: 0x56789012\n- NumParams: 0\n- ParamTypes: []\n- NumReturns: 0\n- ReturnTypes: []\n- NumLocals: 1\n- LocalTypes: [I32]"
+
+        "函数5: get_balance\n- CodePtr: 0x56789012\n- JITCodePtr: 0x67890123\n- NumParams: 1\n- ParamTypes: [I32]\n- NumReturns: 1\n- ReturnTypes: [I64]\n- NumLocals: 2\n- LocalTypes: [I32, I64]"
+
+        "函数6: transfer\n- CodePtr: 0x67890123\n- JITCodePtr: 0x78901234\n- NumParams: 2\n- ParamTypes: [I32, I64]\n- NumReturns: 1\n- ReturnTypes: [I32]\n- NumLocals: 3\n- LocalTypes: [I32, I64, I32]"
+      }
+    }
+
+    rectangle "GlobalInstance数组" as Globals2 #AED6F1 {
+      "全局变量1: owner\n- Type: I32\n- Mutable: false\n- Offset: 0"
+
+      "全局变量2: total_supply\n- Type: I64\n- Mutable: true\n- Offset: 4"
+
+      "全局变量3: initialized\n- Type: I32\n- Mutable: true\n- Offset: 12"
+    }
+
+    rectangle "全局变量数据" as GlobalData2 #AED6F1 {
+      "owner: 0 (初始值)\ntotal_supply: 1000000 (初始值)\ninitialized: 0 (初始值)"
+    }
+
+    rectangle "TableInstance数组" as Tables2 #AED6F1 {
+      "表1: funcref\n- CurSize: 8\n- MaxSize: 16\n- Elements: 指向表元素的指针"
+    }
+
+    rectangle "表元素" as TableElems2 #AED6F1 {
+      "0: 函数索引4 (init)\n1: 函数索引5 (get_balance)\n2: 函数索引6 (transfer)\n3-7: 0 (未初始化)"
+    }
+
+    rectangle "MemoryInstance数组" as Memories2 #AED6F1 {
+      "内存1:\n- CurPages: 2 (128KB)\n- MaxPages: 32 (2MB)\n- MemSize: 131072\n- MemBase: 指向线性内存的指针\n- MemEnd: MemBase + MemSize\n- Kind: WM_MEMORY_DATA_TYPE_BUCKET_MMAP"
+    }
+
+    rectangle "线性内存" as LinearMem2 #AED6F1 {
+      rectangle "数据段1" as DataSeg2_1 {
+        "偏移量: 0\n内容: \"Token Contract\""
+      }
+      rectangle "数据段2" as DataSeg2_2 {
+        "偏移量: 16\n内容: [账户数据结构模板]"
+      }
+      rectangle "堆区" as Heap2 {
+        "动态分配的内存区域\n- 账户余额映射\n- 交易历史记录"
+      }
+      rectangle "栈区" as Stack2 {
+        "局部变量和函数调用栈"
+      }
+    }
+
+    ' 如果启用JIT
+    rectangle "函数指针数组" as FuncPtrs2 #AED6F1 {
+      "函数1指针: 0x12345678\n函数2指针: 0xABCDEF01\n函数3指针: 0xBCDEF012\n函数4指针: 0x45678901\n函数5指针: 0x56789012\n函数6指针: 0x67890123"
+    }
+
+    rectangle "函数类型索引数组" as FuncTypeIndexes2 #AED6F1 {
+      "函数1类型索引: 0\n函数2类型索引: 1\n函数3类型索引: 2\n函数4类型索引: 3\n函数5类型索引: 4\n函数6类型索引: 5"
+    }
+  }
+
+  ' 合约3的内存布局
+  rectangle "合约3内存空间 (最大1000页，约64MB)" as Contract3 {
+    rectangle "Instance对象" as Instance3 #FADBD8 {
+      rectangle "基本字段" as Instance3Base {
+        "Iso: Isolation*\nMod: Module*\nNumTotalGlobals: uint32_t\nNumTotalMemories: uint32_t\nNumTotalTables: uint32_t\nNumTotalFunctions: uint32_t\nGasLimit: uint64_t\nGasUsed: uint64_t\nError: Error\nMemDataKind: WasmMemoryDataType"
+      }
+    }
+
+    rectangle "FunctionInstance数组" as Functions3 #FADBD8 {
+      rectangle "导入函数" as ImportFuncs3 {
+        "函数1: print_i32\n- CodePtr: 0x12345678\n- NumParams: 1\n- ParamTypes: [I32]\n- NumReturns: 0\n- ReturnTypes: []"
+
+        "函数2: random\n- CodePtr: 0xCDEF0123\n- NumParams: 0\n- ParamTypes: []\n- NumReturns: 1\n- ReturnTypes: [I32]"
+      }
+      rectangle "内部函数" as InternalFuncs3 {
+        "函数3: start_game\n- CodePtr: 0x89012345\n- JITCodePtr: 0x90123456\n- NumParams: 0\n- ParamTypes: []\n- NumReturns: 1\n- ReturnTypes: [I32]\n- NumLocals: 1\n- LocalTypes: [I32]"
+
+        "函数4: make_move\n- CodePtr: 0x90123456\n- JITCodePtr: 0xA0123456\n- NumParams: 2\n- ParamTypes: [I32, I32]\n- NumReturns: 1\n- ReturnTypes: [I32]\n- NumLocals: 3\n- LocalTypes: [I32, I32, I32]"
+
+        "函数5: get_state\n- CodePtr: 0xA0123456\n- JITCodePtr: 0xB0123456\n- NumParams: 1\n- ParamTypes: [I32]\n- NumReturns: 1\n- ReturnTypes: [I32]\n- NumLocals: 1\n- LocalTypes: [I32]"
+      }
+    }
+
+    rectangle "GlobalInstance数组" as Globals3 #FADBD8 {
+      "全局变量1: game_count\n- Type: I32\n- Mutable: true\n- Offset: 0"
+
+      "全局变量2: current_player\n- Type: I32\n- Mutable: true\n- Offset: 4"
+
+      "全局变量3: game_state\n- Type: I32\n- Mutable: true\n- Offset: 8"
+    }
+
+    rectangle "全局变量数据" as GlobalData3 #FADBD8 {
+      "game_count: 0 (初始值)\ncurrent_player: 0 (初始值)\ngame_state: 0 (初始值)"
+    }
+
+    rectangle "TableInstance数组" as Tables3 #FADBD8 {
+      "表1: funcref\n- CurSize: 5\n- MaxSize: 10\n- Elements: 指向表元素的指针"
+    }
+
+    rectangle "表元素" as TableElems3 #FADBD8 {
+      "0: 函数索引3 (start_game)\n1: 函数索引4 (make_move)\n2: 函数索引5 (get_state)\n3-4: 0 (未初始化)"
+    }
+
+    rectangle "MemoryInstance数组" as Memories3 #FADBD8 {
+      "内存1:\n- CurPages: 1 (64KB)\n- MaxPages: 16 (1MB)\n- MemSize: 65536\n- MemBase: 指向线性内存的指针\n- MemEnd: MemBase + MemSize\n- Kind: WM_MEMORY_DATA_TYPE_BUCKET_MMAP"
+    }
+
+    rectangle "线性内存" as LinearMem3 #FADBD8 {
+      rectangle "数据段1" as DataSeg3_1 {
+        "偏移量: 0\n内容: \"Game Contract\""
+      }
+      rectangle "数据段2" as DataSeg3_2 {
+        "偏移量: 16\n内容: [游戏棋盘初始状态]"
+      }
+      rectangle "堆区" as Heap3 {
+        "动态分配的内存区域\n- 游戏状态数据\n- 玩家信息"
+      }
+      rectangle "栈区" as Stack3 {
+        "局部变量和函数调用栈"
+      }
+    }
+
+    ' 如果启用JIT
+    rectangle "函数指针数组" as FuncPtrs3 #FADBD8 {
+      "函数1指针: 0x12345678\n函数2指针: 0xCDEF0123\n函数3指针: 0x89012345\n函数4指针: 0x90123456\n函数5指针: 0xA0123456"
+    }
+
+    rectangle "函数类型索引数组" as FuncTypeIndexes3 #FADBD8 {
+      "函数1类型索引: 0\n函数2类型索引: 1\n函数3类型索引: 2\n函数4类型索引: 3\n函数5类型索引: 4"
+    }
+  }
+
+  ' 其他桶项
+  rectangle "桶项4-10 (未使用)" as UnusedBuckets #F5F5F5 {
+    "预留给未来的合约实例"
+  }
+}
+
+' 添加注释
+note bottom of Contract1
+  <b>简单计算合约</b>
+  - 提供基本的算术运算功能
+  - 内存使用较少，只有1页(64KB)
+  - 全局变量少，只有计数器和常量
+end note
+
+note bottom of Contract2
+  <b>代币合约</b>
+  - 实现ERC20类似的代币功能
+  - 内存使用中等，2页(128KB)
+  - 需要存储账户余额和交易记录
+  - 使用存储API与链状态交互
+end note
+
+note bottom of Contract3
+  <b>游戏合约</b>
+  - 实现简单的游戏逻辑
+  - 内存使用较少，1页(64KB)
+  - 需要随机数功能
+  - 存储游戏状态和玩家信息
+end note
+
+note bottom of UnusedBuckets
+  内存桶预分配了10个桶项（WasmMemoryAllocatorBucketDuplicates = 10），
+  每个桶项大小为最大1000页（约64MB），
+  当前只使用了3个桶项，
+  剩余7个桶项可用于未来的合约实例
+end note
+
+' 添加关系
+Contract1 -[hidden]-> Contract2
+Contract2 -[hidden]-> Contract3
+Contract3 -[hidden]-> UnusedBuckets
+
+' 内部关系
+Instance1 -[hidden]-> Functions1
+Functions1 -[hidden]-> Globals1
+Globals1 -[hidden]-> GlobalData1
+GlobalData1 -[hidden]-> Tables1
+Tables1 -[hidden]-> TableElems1
+TableElems1 -[hidden]-> Memories1
+Memories1 -[hidden]-> LinearMem1
+LinearMem1 -[hidden]-> FuncPtrs1
+FuncPtrs1 -[hidden]-> FuncTypeIndexes1
+
+Instance2 -[hidden]-> Functions2
+Functions2 -[hidden]-> Globals2
+Globals2 -[hidden]-> GlobalData2
+GlobalData2 -[hidden]-> Tables2
+Tables2 -[hidden]-> TableElems2
+TableElems2 -[hidden]-> Memories2
+Memories2 -[hidden]-> LinearMem2
+LinearMem2 -[hidden]-> FuncPtrs2
+FuncPtrs2 -[hidden]-> FuncTypeIndexes2
+
+Instance3 -[hidden]-> Functions3
+Functions3 -[hidden]-> Globals3
+Globals3 -[hidden]-> GlobalData3
+GlobalData3 -[hidden]-> Tables3
+Tables3 -[hidden]-> TableElems3
+TableElems3 -[hidden]-> Memories3
+Memories3 -[hidden]-> LinearMem3
+LinearMem3 -[hidden]-> FuncPtrs3
+FuncPtrs3 -[hidden]-> FuncTypeIndexes3
+
+@enduml

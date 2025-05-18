@@ -1,0 +1,139 @@
+@startuml DTVM项目架构图
+
+' 使用中文标题
+title DTVM项目架构图
+
+' 设置样式
+skinparam {
+  ArrowColor #2C3E50
+  BackgroundColor #FFFFFF
+  ComponentBackgroundColor #ECF0F1
+  ComponentBorderColor #3498DB
+  PackageBackgroundColor #F8F9FA
+  PackageBorderColor #2980B9
+  NodeBackgroundColor #E8F8F5
+  NodeBorderColor #16A085
+  InterfaceBackgroundColor #FDEDEC
+  InterfaceBorderColor #E74C3C
+  DatabaseBackgroundColor #F5EEF8
+  DatabaseBorderColor #8E44AD
+  FrameBackgroundColor #FEF9E7
+  FrameBorderColor #F39C12
+}
+
+' 定义组件
+package "核心运行时 (src/runtime)" as Runtime {
+  [运行时管理器 (src/runtime/runtime.h)] as RuntimeManager
+  [模块加载器 (src/runtime/module.h)] as ModuleLoader
+  [实例管理器 (src/runtime/instance.h)] as InstanceManager
+  [内存管理器 (src/runtime/memory.h)] as MemoryManager
+  [隔离环境 (src/runtime/isolation.h)] as Isolation
+  [Gas计量系统 (src/runtime/gas.h)] as GasMetering
+}
+
+package "编译器 (src/compiler)" as Compiler {
+  [解释器 (src/compiler/stub/interpreter.h)] as Interpreter
+  [单通道编译器 (src/singlepass)] as SinglepassCompiler
+  [多通道编译器 (src/compiler/mir)] as MultipassCompiler
+  [代码生成器 (src/singlepass/common/codegen.h)] as CodeGenerator
+  [优化器 (src/compiler/mir/optimizer.h)] as Optimizer
+}
+
+package "主机接口 (src/host)" as HostInterface {
+  [环境模块 (src/host/env)] as EnvModule
+  [WASI模块 (src/host/wasi)] as WASIModule
+  [测试模块 (src/host/spectest)] as SpectestModule
+  [主机函数注册器 (src/host/host_module.h)] as HostFuncRegistrar
+}
+
+package "平台抽象 (src/platform)" as Platform {
+  [POSIX平台 (src/platform/posix)] as POSIXPlatform
+  [SGX平台 (src/platform/sgx)] as SGXPlatform
+  [内存映射 (src/platform/memory_map.h)] as MemoryMapping
+  [线程管理 (src/platform/thread.h)] as ThreadManagement
+}
+
+package "语言绑定" as LanguageBindings {
+  [C API (src/entrypoint/zetaengine-c.h)] as CAPI
+  [Rust绑定 (rust_crate/src)] as RustBindings
+  [C++绑定 (src/entrypoint/zetaengine.h)] as CPPBindings
+}
+
+package "工具与示例" as ToolsAndExamples {
+  [Rust示例 (rust_crate/rust_example)] as RustExample
+  [C示例 (example/c_api)] as CExample
+  [SGX示例 (example/cpp_sgx)] as SGXExample
+  [测试工具 (tests)] as TestTools
+}
+
+' 定义关系
+RuntimeManager --> ModuleLoader : 使用
+RuntimeManager --> InstanceManager : 管理
+RuntimeManager --> Isolation : 创建
+InstanceManager --> MemoryManager : 使用
+InstanceManager --> GasMetering : 使用
+
+ModuleLoader --> Compiler : 使用
+InstanceManager --> Compiler : 使用
+
+Compiler --> Interpreter : 包含
+Compiler --> SinglepassCompiler : 包含
+Compiler --> MultipassCompiler : 包含
+SinglepassCompiler --> CodeGenerator : 使用
+MultipassCompiler --> CodeGenerator : 使用
+MultipassCompiler --> Optimizer : 使用
+
+RuntimeManager --> HostInterface : 注册
+HostInterface --> EnvModule : 包含
+HostInterface --> WASIModule : 包含
+HostInterface --> SpectestModule : 包含
+HostInterface --> HostFuncRegistrar : 使用
+
+Runtime --> Platform : 依赖
+Platform --> POSIXPlatform : 包含
+Platform --> SGXPlatform : 包含
+Platform --> MemoryMapping : 提供
+Platform --> ThreadManagement : 提供
+
+CAPI --> Runtime : 封装
+RustBindings --> Runtime : 封装
+CPPBindings --> Runtime : 封装
+
+RustExample --> RustBindings : 使用
+CExample --> CAPI : 使用
+SGXExample --> CAPI : 使用
+SGXExample --> SGXPlatform : 使用
+TestTools --> Runtime : 测试
+
+' 添加注释
+note right of Runtime
+  核心运行时负责WebAssembly模块的
+  加载、实例化和执行
+end note
+
+note right of Compiler
+  编译器将WebAssembly字节码
+  转换为可执行代码
+end note
+
+note right of HostInterface
+  主机接口允许WebAssembly代码
+  调用主机环境中的函数
+end note
+
+note right of Platform
+  平台抽象提供跨平台能力，
+  支持不同操作系统和硬件
+end note
+
+note right of LanguageBindings
+  语言绑定提供多种编程语言的接口，
+  方便不同语言的开发者使用
+end note
+
+note right of ToolsAndExamples
+  工具与示例提供使用参考和
+  测试验证功能
+end note
+
+@enduml

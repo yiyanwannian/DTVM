@@ -1,0 +1,143 @@
+@startuml DTVM隔离环境实例管理
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  RectangleBackgroundColor #ECF0F1
+  RectangleBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义隔离环境
+rectangle "Runtime" as Runtime {
+  rectangle "Isolation 1" as Iso1 {
+    rectangle "Instance 1" as Inst1_1 {
+      "Module: Token Contract\nGasLimit: 1000000\nMemories: 1\nFunctions: 10\nGlobals: 5\nTables: 1"
+    }
+    
+    rectangle "Instance 2" as Inst1_2 {
+      "Module: Game Contract\nGasLimit: 500000\nMemories: 1\nFunctions: 8\nGlobals: 3\nTables: 1"
+    }
+    
+    rectangle "Instance 3" as Inst1_3 {
+      "Module: Storage Contract\nGasLimit: 800000\nMemories: 1\nFunctions: 12\nGlobals: 7\nTables: 2"
+    }
+    
+    rectangle "WNIEnv" as WNIEnv1 {
+      "_linear_mem_base: 0x7f8a1c000000\n_linear_mem_size: 65536\n_linear_mem_end: 0x7f8a1c010000\n_user_defined_ctx: 0x7f8a1b000100"
+    }
+  }
+  
+  rectangle "Isolation 2" as Iso2 {
+    rectangle "Instance 4" as Inst2_1 {
+      "Module: NFT Contract\nGasLimit: 1200000\nMemories: 1\nFunctions: 15\nGlobals: 8\nTables: 1"
+    }
+    
+    rectangle "Instance 5" as Inst2_2 {
+      "Module: Auction Contract\nGasLimit: 900000\nMemories: 1\nFunctions: 11\nGlobals: 6\nTables: 1"
+    }
+    
+    rectangle "WNIEnv" as WNIEnv2 {
+      "_linear_mem_base: 0x7f8a1d000000\n_linear_mem_size: 131072\n_linear_mem_end: 0x7f8a1d020000\n_user_defined_ctx: 0x7f8a1b000200"
+    }
+  }
+  
+  rectangle "Isolation 3" as Iso3 {
+    rectangle "Instance 6" as Inst3_1 {
+      "Module: Voting Contract\nGasLimit: 700000\nMemories: 1\nFunctions: 9\nGlobals: 4\nTables: 1"
+    }
+    
+    rectangle "WNIEnv" as WNIEnv3 {
+      "_linear_mem_base: 0x7f8a1e000000\n_linear_mem_size: 65536\n_linear_mem_end: 0x7f8a1e010000\n_user_defined_ctx: 0x7f8a1b000300"
+    }
+  }
+  
+  rectangle "HostModulePool" as HostModulePool {
+    rectangle "WASI Module" as WASI {
+      "Name: wasi_snapshot_preview1\nFunctions: fd_write, environ_get, ..."
+    }
+    
+    rectangle "Blockchain Module" as Blockchain {
+      "Name: blockchain\nFunctions: get_balance, transfer, ..."
+    }
+  }
+  
+  rectangle "ModulePool" as ModulePool {
+    rectangle "Token Module" as TokenMod {
+      "Name: token\nFunctions: 10\nGlobals: 5\nTables: 1\nMemories: 1"
+    }
+    
+    rectangle "Game Module" as GameMod {
+      "Name: game\nFunctions: 8\nGlobals: 3\nTables: 1\nMemories: 1"
+    }
+    
+    rectangle "Storage Module" as StorageMod {
+      "Name: storage\nFunctions: 12\nGlobals: 7\nTables: 2\nMemories: 1"
+    }
+    
+    rectangle "NFT Module" as NFTMod {
+      "Name: nft\nFunctions: 15\nGlobals: 8\nTables: 1\nMemories: 1"
+    }
+    
+    rectangle "Auction Module" as AuctionMod {
+      "Name: auction\nFunctions: 11\nGlobals: 6\nTables: 1\nMemories: 1"
+    }
+    
+    rectangle "Voting Module" as VotingMod {
+      "Name: voting\nFunctions: 9\nGlobals: 4\nTables: 1\nMemories: 1"
+    }
+  }
+}
+
+' 添加关系
+Iso1 -[hidden]-> Iso2
+Iso2 -[hidden]-> Iso3
+Iso3 -[hidden]-> HostModulePool
+HostModulePool -[hidden]-> ModulePool
+
+Inst1_1 -[hidden]-> Inst1_2
+Inst1_2 -[hidden]-> Inst1_3
+Inst1_3 -[hidden]-> WNIEnv1
+
+Inst2_1 -[hidden]-> Inst2_2
+Inst2_2 -[hidden]-> WNIEnv2
+
+Inst3_1 -[hidden]-> WNIEnv3
+
+WASI -[hidden]-> Blockchain
+
+TokenMod -[hidden]-> GameMod
+GameMod -[hidden]-> StorageMod
+StorageMod -[hidden]-> NFTMod
+NFTMod -[hidden]-> AuctionMod
+AuctionMod -[hidden]-> VotingMod
+
+' 添加注释
+note bottom of Iso1
+  隔离环境1管理3个WebAssembly实例，
+  每个实例都有自己的内存空间和执行上下文
+end note
+
+note bottom of Iso2
+  隔离环境2管理2个WebAssembly实例，
+  它们与隔离环境1中的实例完全隔离
+end note
+
+note bottom of Iso3
+  隔离环境3管理1个WebAssembly实例，
+  展示了隔离环境的灵活性
+end note
+
+note bottom of HostModulePool
+  主机模块池存储所有可用的主机模块，
+  如WASI和区块链接口模块
+end note
+
+note bottom of ModulePool
+  模块池存储所有加载的WebAssembly模块，
+  可以被多个隔离环境中的实例共享
+end note
+
+@enduml

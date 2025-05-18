@@ -1,0 +1,106 @@
+@startuml DTVM执行流程图
+
+' 使用中文标题
+title DTVM WebAssembly执行流程图
+
+' 设置样式
+skinparam {
+  ArrowColor #2C3E50
+  BackgroundColor #FFFFFF
+  ActivityBackgroundColor #ECF0F1
+  ActivityBorderColor #3498DB
+  ActivityDiamondBackgroundColor #F8F9FA
+  ActivityDiamondBorderColor #2980B9
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义活动
+start
+
+:创建运行时配置;
+note right
+  可配置编译模式、内存映射、
+  WASI支持等选项
+end note
+
+:初始化运行时;
+
+:注册主机函数;
+note right
+  注册可供WebAssembly调用的
+  主机环境函数
+end note
+
+:加载WebAssembly模块;
+
+if (模块验证) then (通过)
+  :解析模块结构;
+  :验证类型和函数签名;
+  :链接导入函数;
+else (失败)
+  :返回加载错误;
+  stop
+endif
+
+:创建隔离环境;
+note right
+  隔离环境确保不同WebAssembly
+  实例之间相互隔离
+end note
+
+:设置Gas限制;
+note right
+  防止无限循环和资源滥用
+end note
+
+:创建WebAssembly实例;
+
+if (编译模式) then (解释器)
+  :准备解释执行;
+else (JIT)
+  :编译为本地代码;
+  if (编译模式) then (单通道)
+    :单通道编译;
+  else (多通道)
+    :多通道优化编译;
+  endif
+endif
+
+:初始化内存和全局变量;
+:执行模块初始化代码;
+
+:准备函数参数;
+:调用WebAssembly函数;
+
+fork
+  :执行WebAssembly代码;
+  note right
+    执行过程中消耗Gas，
+    当Gas耗尽时终止执行
+  end note
+fork again
+  :监控Gas消耗;
+  if (Gas耗尽?) then (是)
+    :抛出Gas耗尽异常;
+  else (否)
+    :继续执行;
+  endif
+end fork
+
+if (执行成功?) then (是)
+  :获取执行结果;
+  :返回结果给调用者;
+else (否)
+  :捕获并处理异常;
+  :返回错误信息;
+endif
+
+:清理资源;
+note right
+  释放内存和其他资源
+end note
+
+stop
+
+@enduml

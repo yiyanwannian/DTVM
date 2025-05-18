@@ -1,0 +1,144 @@
+@startuml 合约执行组件交互图
+
+' 使用中文标题
+title 智能合约执行过程中的组件交互图
+
+' 设置样式
+skinparam {
+  ArrowColor #2C3E50
+  BackgroundColor #FFFFFF
+  ComponentBackgroundColor #ECF0F1
+  ComponentBorderColor #3498DB
+  InterfaceBackgroundColor #FDEDEC
+  InterfaceBorderColor #E74C3C
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义组件
+package "外部工具链" {
+  [Rust编译器] as RustCompiler
+  [C/C++编译器] as CppCompiler
+  [AssemblyScript编译器] as ASCompiler
+  
+  interface "wasm32-unknown-unknown" as WasmTarget
+  interface "emscripten" as Emscripten
+  interface "asc" as ASC
+  
+  RustCompiler -- WasmTarget
+  CppCompiler -- Emscripten
+  ASCompiler -- ASC
+}
+
+package "DTVM核心" {
+  package "运行时 (src/runtime)" {
+    [运行时管理器 (runtime.cpp)] as RuntimeManager
+    [模块管理器 (module.cpp)] as ModuleManager
+    [隔离环境 (isolation.cpp)] as Isolation
+    [实例管理器 (instance.cpp)] as InstanceManager
+    [代码持有器 (codeholder.cpp)] as CodeHolder
+  }
+  
+  package "动作 (src/action)" {
+    [模块加载器 (module_loader.cpp)] as ModuleLoader
+    [函数加载器 (function_loader.cpp)] as FunctionLoader
+    [实例化器 (instantiator.cpp)] as Instantiator
+    [解释器 (interpreter.cpp)] as Interpreter
+  }
+  
+  package "编译器 (src/compiler)" {
+    [单通道编译器 (src/singlepass)] as SinglepassCompiler
+    [多通道编译器 (src/compiler/mir)] as MultipassCompiler
+  }
+  
+  package "主机接口 (src/host)" {
+    [环境模块 (env)] as EnvModule
+    [WASI模块 (wasi)] as WASIModule
+  }
+}
+
+package "Rust接口 (rust_crate/src/core)" {
+  [ZenRuntime (runtime.rs)] as ZenRuntime
+  [ZenModule (module.rs)] as ZenModule
+  [ZenIsolation (isolation.rs)] as ZenIsolation
+  [ZenInstance (instance.rs)] as ZenInstance
+}
+
+' 定义接口
+interface "WebAssembly二进制(.wasm)" as WasmBinary
+interface "加载模块" as LoadModule
+interface "创建隔离环境" as CreateIsolation
+interface "创建实例" as CreateInstance
+interface "调用函数" as CallFunction
+
+' 定义关系
+WasmTarget --> WasmBinary
+Emscripten --> WasmBinary
+ASC --> WasmBinary
+
+ZenRuntime -- LoadModule
+LoadModule -- RuntimeManager
+
+RuntimeManager --> ModuleManager : 创建模块
+ModuleManager --> CodeHolder : 加载代码
+CodeHolder --> ModuleLoader : 解析模块
+ModuleLoader --> FunctionLoader : 加载函数
+
+ZenRuntime -- CreateIsolation
+CreateIsolation -- RuntimeManager
+RuntimeManager --> Isolation : 创建隔离环境
+
+ZenModule -- CreateInstance
+CreateInstance -- ModuleManager
+ModuleManager --> Isolation : 创建实例
+Isolation --> InstanceManager : 管理实例
+InstanceManager --> Instantiator : 实例化
+
+ZenInstance -- CallFunction
+CallFunction -- InstanceManager
+InstanceManager --> Interpreter : 解释执行
+InstanceManager --> SinglepassCompiler : JIT编译(单通道)
+InstanceManager --> MultipassCompiler : JIT编译(多通道)
+
+InstanceManager --> EnvModule : 调用主机函数
+InstanceManager --> WASIModule : 调用WASI函数
+
+WasmBinary --> CodeHolder : 加载
+
+' 添加注释
+note right of WasmBinary
+  WebAssembly二进制格式(.wasm)
+  是合约源码编译后的产物
+end note
+
+note right of ModuleLoader
+  模块加载器负责解析WebAssembly二进制格式，
+  包括类型、导入、函数、内存、表、导出等段
+  src/action/module_loader.cpp
+end note
+
+note right of Instantiator
+  实例化器负责创建模块的运行实例，
+  包括初始化内存、全局变量、函数表等
+  src/action/instantiator.cpp
+end note
+
+note right of Interpreter
+  解释器直接解释执行WebAssembly字节码，
+  无需编译，但执行速度较慢
+  src/action/interpreter.cpp
+end note
+
+note right of SinglepassCompiler
+  单通道编译器将WebAssembly编译为本地代码，
+  编译速度快，生成代码质量适中
+  src/singlepass/singlepass.cpp
+end note
+
+note right of MultipassCompiler
+  多通道编译器进行多阶段优化编译，
+  生成高质量的优化代码，但编译时间较长
+  src/compiler/compiler.cpp
+end note
+
+@enduml

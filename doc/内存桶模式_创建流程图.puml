@@ -1,0 +1,92 @@
+@startuml 内存桶模式创建流程
+
+' 使用中文标题
+title DTVM内存桶模式创建流程
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  SequenceArrowThickness 2
+  SequenceLifeLineBorderColor #3498DB
+  SequenceLifeLineBackgroundColor #ECF0F1
+  ParticipantBackgroundColor #ECF0F1
+  ParticipantBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义参与者
+participant "Runtime" as RT
+participant "Module" as Mod
+participant "WasmMemoryAllocator" as Allocator
+participant "操作系统" as OS
+participant "Instance" as Inst
+
+' 定义序列
+RT -> Mod : 1. 加载WebAssembly模块
+activate Mod
+
+Mod -> Allocator : 2. 创建内存分配器
+activate Allocator
+
+Allocator -> Allocator : 3. 检查是否可以使用内存桶模式
+note right: 验证模块是否满足条件:\n- 只有一个内存段\n- 初始大小不为0\n- 初始大小不超过最大限制
+
+alt 可以使用内存桶模式
+  Allocator -> OS : 4a. 创建临时文件
+  OS --> Allocator : 返回文件描述符
+  
+  Allocator -> OS : 5a. 使用mmap映射文件
+  OS --> Allocator : 返回映射地址
+  
+  Allocator -> Allocator : 6a. 设置内存桶参数
+  note right: - MmapBucketSize\n- MmapBucketItemSize\n- DefaultMemoryType = WM_MEMORY_DATA_TYPE_BUCKET_MMAP
+else 不能使用内存桶模式
+  Allocator -> Allocator : 4b. 设置单一映射模式
+  note right: DefaultMemoryType = WM_MEMORY_DATA_TYPE_SINGLE_MMAP
+end
+
+Allocator --> Mod : 返回内存分配器
+deactivate Allocator
+
+Mod --> RT : 返回加载的模块
+deactivate Mod
+
+RT -> Inst : 7. 创建WebAssembly实例
+activate Inst
+
+Inst -> Allocator : 8. 分配线性内存
+activate Allocator
+
+alt 使用内存桶模式
+  Allocator -> Allocator : 9a. 调用getOrCreateMmapSpace
+  
+  alt 没有可用的桶实例
+    Allocator -> OS : 10a.1. 使用mmap创建新的内存桶
+    OS --> Allocator : 返回映射地址
+    
+    Allocator -> Allocator : 10a.2. 创建新的桶实例
+    note right: 创建MmapBucketInstance对象\n并添加到ActiveBuckets映射
+  end
+  
+  Allocator -> Allocator : 11a. 从桶中分配桶项
+  note right: 返回WasmMemoryBucketSlice，\n包含桶项的地址和大小
+  
+  Allocator --> Inst : 返回WM_MEMORY_DATA_TYPE_BUCKET_MMAP类型的内存
+else 使用单一映射模式
+  Allocator -> OS : 9b. 使用mmap分配单独的内存
+  OS --> Allocator : 返回映射地址
+  
+  Allocator --> Inst : 返回WM_MEMORY_DATA_TYPE_SINGLE_MMAP类型的内存
+end
+
+deactivate Allocator
+
+Inst -> Inst : 12. 初始化内存实例
+note right: 设置MemBase、MemSize、\nMemEnd和Kind属性
+
+Inst --> RT : 返回创建的实例
+deactivate Inst
+
+@enduml

@@ -1,0 +1,64 @@
+@startuml 内存桶模式释放流程
+
+' 使用中文标题
+title DTVM内存桶模式释放流程
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  SequenceArrowThickness 2
+  SequenceLifeLineBorderColor #3498DB
+  SequenceLifeLineBackgroundColor #ECF0F1
+  ParticipantBackgroundColor #ECF0F1
+  ParticipantBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义参与者
+participant "Runtime" as RT
+participant "Instance" as Inst
+participant "WasmMemoryAllocator" as Allocator
+participant "操作系统" as OS
+
+' 定义序列
+RT -> Inst : 1. 销毁实例
+activate Inst
+
+Inst -> Allocator : 2. 调用freeWasmMemory
+activate Allocator
+
+Allocator -> Allocator : 3. 调用internalFreeWasmMemory
+note right: 根据内存类型执行不同的释放操作
+
+alt 内存类型为WM_MEMORY_DATA_TYPE_BUCKET_MMAP
+  Allocator -> Allocator : 4a. 查找内存地址对应的桶地址
+  
+  Allocator -> Allocator : 5a. 增加桶释放计数
+  note right: 记录已释放的桶项数量
+  
+  alt 所有桶项都已释放
+    Allocator -> OS : 6a.1. 调用munmap释放整个内存桶
+    OS --> Allocator : 返回结果
+    
+    Allocator -> Allocator : 7a.1. 清理相关数据结构
+    note right: 从ActiveBuckets、MemoryAddrToMmapAddr\n和MmapBucketsFreedCount中移除
+  else 还有桶项在使用
+    Allocator -> Allocator : 6a.2. 只从映射中移除
+    note right: 从MemoryAddrToMmapAddr中移除，\n但保留内存桶
+  end
+else 内存类型为WM_MEMORY_DATA_TYPE_SINGLE_MMAP
+  Allocator -> OS : 4b. 调用munmap释放内存
+  OS --> Allocator : 返回结果
+else 内存类型为WM_MEMORY_DATA_TYPE_MALLOC
+  Allocator -> Allocator : 4c. 调用deallocate释放内存
+end
+
+Allocator --> Inst : 返回结果
+deactivate Allocator
+
+Inst --> RT : 返回结果
+deactivate Inst
+
+@enduml

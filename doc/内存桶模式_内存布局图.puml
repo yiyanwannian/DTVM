@@ -1,0 +1,62 @@
+@startuml 内存桶模式内存布局
+
+' 使用中文标题
+title DTVM内存桶模式内存布局
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  RectangleBackgroundColor #ECF0F1
+  RectangleBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义内存布局
+rectangle "内存桶 (8GB)" {
+  rectangle "桶项1 (64MB)" as Bucket1 #D5F5E3
+  rectangle "桶项2 (64MB)" as Bucket2 #D5F5E3
+  rectangle "桶项3 (64MB)" as Bucket3 #D5F5E3
+  rectangle "桶项4 (64MB)" as Bucket4 #D5F5E3
+  rectangle "..." as BucketDots
+  rectangle "桶项10 (64MB)" as Bucket10 #D5F5E3
+  
+  ' 内部结构
+  Bucket1 -[hidden]-> Bucket2
+  Bucket2 -[hidden]-> Bucket3
+  Bucket3 -[hidden]-> Bucket4
+  Bucket4 -[hidden]-> BucketDots
+  BucketDots -[hidden]-> Bucket10
+}
+
+' 添加注释
+note left of Bucket1
+  每个桶项是一块连续的内存空间，
+  用于存储WebAssembly线性内存
+end note
+
+note right of Bucket1
+  桶项1: 实例1的线性内存
+  - 初始大小: 1页 (64KB)
+  - 最大大小: 1000页 (64MB)
+end note
+
+note right of Bucket2
+  桶项2: 实例2的线性内存
+  - 初始大小: 2页 (128KB)
+  - 最大大小: 1000页 (64MB)
+end note
+
+note right of Bucket3
+  桶项3: 实例3的线性内存
+  - 初始大小: 5页 (320KB)
+  - 最大大小: 1000页 (64MB)
+end note
+
+note bottom of Bucket10
+  内存桶通常包含10个桶项
+  (WasmMemoryAllocatorBucketDuplicates = 10)
+end note
+
+@enduml

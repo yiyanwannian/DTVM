@@ -1,0 +1,236 @@
+@startuml 合约执行流程图
+
+' 使用中文标题
+title 智能合约从源码到执行的完整流程图
+
+' 设置样式
+skinparam {
+  ArrowColor #2C3E50
+  BackgroundColor #FFFFFF
+  ActivityBackgroundColor #ECF0F1
+  ActivityBorderColor #3498DB
+  ActivityDiamondBackgroundColor #F8F9FA
+  ActivityDiamondBorderColor #2980B9
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+  ParticipantBackgroundColor #FDEDEC
+  ParticipantBorderColor #E74C3C
+  SequenceLifeLineBackgroundColor #F5EEF8
+  SequenceLifeLineBorderColor #8E44AD
+}
+
+' 定义参与者
+participant "合约开发者" as Developer
+participant "外部编译工具" as Compiler
+participant "DTVM运行时" as Runtime #LightBlue
+participant "模块加载器" as ModuleLoader #LightGreen
+participant "编译器" as JITCompiler #LightYellow
+participant "实例化器" as Instantiator #LightCoral
+participant "执行引擎" as Executor #LightPink
+
+' 流程开始
+Developer -> Compiler: 编写合约源码\n(Rust/C++/AssemblyScript等)
+note right
+  合约源码可以使用多种语言编写，
+  只要能编译为WebAssembly即可
+end note
+
+Compiler -> Compiler: 编译为WebAssembly
+note right of Compiler
+  使用外部工具链编译:
+  - Rust: cargo build --target wasm32-unknown-unknown
+  - C/C++: emscripten/clang
+  - AssemblyScript: asc
+  生成.wasm文件
+end note
+
+Compiler --> Developer: 返回WebAssembly二进制文件(.wasm)
+
+Developer -> Runtime: 加载合约
+note right
+  调用ZenRuntime::load_module()
+  src/runtime/runtime.cpp
+end note
+
+Runtime -> ModuleLoader: 创建模块加载器
+note right
+  创建ModuleLoader对象
+  src/action/module_loader.cpp
+end note
+
+ModuleLoader -> ModuleLoader: 加载模块头部
+note right
+  ModuleLoader::loadModuleHeader()
+  验证魔数和版本
+  src/action/module_loader.cpp
+end note
+
+ModuleLoader -> ModuleLoader: 加载模块主体
+note right
+  ModuleLoader::loadModuleBody()
+  解析各个段(section)
+  src/action/module_loader.cpp
+end note
+
+ModuleLoader -> ModuleLoader: 加载类型段
+note right
+  ModuleLoader::loadTypeSection()
+  解析函数签名
+  src/action/module_loader.cpp
+end note
+
+ModuleLoader -> ModuleLoader: 加载导入段
+note right
+  ModuleLoader::loadImportSection()
+  解析导入的函数、内存和表
+  src/action/module_loader.cpp
+end note
+
+ModuleLoader -> ModuleLoader: 加载函数段
+note right
+  ModuleLoader::loadFunctionSection()
+  解析函数定义
+  src/action/module_loader.cpp
+end note
+
+ModuleLoader -> ModuleLoader: 加载内存段
+note right
+  ModuleLoader::loadMemorySection()
+  解析内存定义
+  src/action/module_loader.cpp
+end note
+
+ModuleLoader -> ModuleLoader: 加载导出段
+note right
+  ModuleLoader::loadExportSection()
+  解析导出的函数、内存和表
+  src/action/module_loader.cpp
+end note
+
+ModuleLoader -> ModuleLoader: 加载代码段
+note right
+  ModuleLoader::loadCodeSection()
+  解析函数体
+  src/action/module_loader.cpp
+end note
+
+ModuleLoader -> ModuleLoader: 加载数据段
+note right
+  ModuleLoader::loadDataSection()
+  解析初始化数据
+  src/action/module_loader.cpp
+end note
+
+ModuleLoader --> Runtime: 返回加载完成的模块
+
+Runtime -> JITCompiler: 编译模块
+note right
+  调用action::performJITCompile()
+  根据运行模式选择编译器
+  src/action/compiler.cpp
+end note
+
+alt 解释器模式
+  JITCompiler -> JITCompiler: 跳过编译
+  note right
+    RunMode::InterpMode
+    直接解释执行WebAssembly字节码
+  end note
+else 单通道编译模式
+  JITCompiler -> JITCompiler: 单通道编译
+  note right
+    RunMode::SinglepassMode
+    singlepass::JITCompiler::compile()
+    src/singlepass/singlepass.cpp
+  end note
+else 多通道编译模式
+  JITCompiler -> JITCompiler: 多通道编译
+  note right
+    RunMode::MultipassMode
+    COMPILER::EagerJITCompiler或LazyJITCompiler
+    src/compiler/compiler.cpp
+  end note
+end
+
+JITCompiler --> Runtime: 返回编译完成的模块
+
+Runtime -> Runtime: 创建隔离环境
+note right
+  调用ZenRuntime::new_isolation()
+  src/runtime/isolation.cpp
+end note
+
+Runtime -> Instantiator: 实例化模块
+note right
+  调用Isolation::createInstance()
+  src/runtime/isolation.cpp
+end note
+
+Instantiator -> Instantiator: 实例化全局变量
+note right
+  Instantiator::instantiateGlobals()
+  初始化全局变量
+  src/action/instantiator.cpp
+end note
+
+Instantiator -> Instantiator: 实例化函数
+note right
+  Instantiator::instantiateFunctions()
+  设置函数实例
+  src/action/instantiator.cpp
+end note
+
+Instantiator -> Instantiator: 实例化表
+note right
+  Instantiator::instantiateTables()
+  初始化函数表
+  src/action/instantiator.cpp
+end note
+
+Instantiator -> Instantiator: 实例化内存
+note right
+  Instantiator::instantiateMemories()
+  分配和初始化内存
+  src/action/instantiator.cpp
+end note
+
+Instantiator -> Instantiator: 初始化数据段
+note right
+  将数据段内容复制到内存
+  src/action/instantiator.cpp
+end note
+
+Instantiator -> Instantiator: 执行start函数
+note right
+  如果模块有start函数，则执行
+  src/action/instantiator.cpp
+end note
+
+Instantiator --> Runtime: 返回实例化完成的实例
+
+Runtime -> Executor: 调用合约函数
+note right
+  调用ZenInstance::call_wasm_func()
+  或Runtime::callWasmFunction()
+  src/runtime/runtime.cpp
+end note
+
+alt 解释器模式
+  Executor -> Executor: 解释执行
+  note right
+    BaseInterpreterImpl::interpret()
+    解释执行WebAssembly字节码
+    src/action/interpreter.cpp
+  end note
+else JIT模式
+  Executor -> Executor: 执行编译后的本地代码
+  note right
+    直接调用编译后的机器码
+  end note
+end
+
+Executor --> Runtime: 返回执行结果
+
+Runtime --> Developer: 返回合约执行结果
+
+@enduml

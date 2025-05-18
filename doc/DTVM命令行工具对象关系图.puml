@@ -1,0 +1,297 @@
+@startuml DTVM命令行工具对象关系图
+
+' 使用中文标题
+title DTVM命令行工具对象关系图
+
+' 设置样式
+skinparam {
+  ArrowColor #2C3E50
+  BackgroundColor #FFFFFF
+  ClassBackgroundColor #ECF0F1
+  ClassBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义类
+class CLI::App {
+  -name_: string
+  -description_: string
+  -parent_: App*
+  -help_ptr_: Option*
+  -help_all_ptr_: Option*
+  -version_ptr_: Option*
+  -formatter_: shared_ptr<FormatterBase>
+  -failure_message_: function<string(const App*, const Error&)>
+  -options_: vector<Option_p>
+  -subcommands_: vector<App_p>
+  +App(app_description: string, app_name: string)
+  +add_option(name: string, variable: T&, description: string): Option*
+  +add_flag(name: string, variable: bool&, description: string): Option*
+  +add_subcommand(name: string, description: string): App*
+  +parse(argc: int, argv: char**): void
+  +help(): string
+  +version(): string
+  +clear(): void
+  ' include/CLI/App.hpp
+}
+
+class RuntimeConfig {
+  +Mode: RunMode
+  +DisableWasmMemoryMap: bool
+  +EnableBenchmark: bool
+  +DisableWASI: bool
+  +EnableStatistics: bool
+  +EnableGdbTracingHook: bool
+  +DisableMultipassGreedyRA: bool
+  +DisableMultipassMultithread: bool
+  +NumMultipassThreads: uint32_t
+  +EnableMultipassLazy: bool
+  +validate(): bool
+  ' src/runtime/config.h
+}
+
+class Runtime {
+  -SymbolPool: ConstStringPool
+  -MPool: MemPool
+  -HostModulePool: unordered_map<WASMSymbol, HostModuleUniquePtr>
+  -ModulePool: unordered_map<WASMSymbol, ModuleUniquePtr>
+  -Isolations: unordered_map<Isolation*, IsolationUniquePtr>
+  -VMMaxMemPages: uint32_t
+  -Config: RuntimeConfig
+  -Stats: Statistics
+  -Mtx: Mutex
+  -_argv_buf: char*
+  -_argv_list: char**
+  -_argc: uint32_t
+  -_env_buf: char*
+  -_env_list: char**
+  -_env_count: uint32_t
+  -_dirs_buf: char*
+  -_dirs_list: char**
+  -_dirs_count: uint32_t
+  +newRuntime(Config: RuntimeConfig): unique_ptr<Runtime>
+  +loadModule(path: string, entryHint: string): MayBe<Module*>
+  +createManagedIsolation(): Isolation*
+  +deleteManagedIsolation(iso: Isolation*): bool
+  +setWASIArgs(wasm_filename: string, args: vector<string>): void
+  +setWASIEnvs(envs: vector<string>): void
+  +setWASIDirs(dirs: vector<string>): void
+  +setVmMaxMemoryPages(pages: uint32_t): void
+  +getVmMaxMemoryPages(): uint32_t
+  +getConfig(): const RuntimeConfig&
+  +getStatistics(): Statistics&
+  +callWasmFunction(inst: Instance&, funcName: string, args: vector<string>, results: vector<TypedValue>&): bool
+  +callWasmMain(inst: Instance&, results: vector<TypedValue>&): bool
+  ' src/runtime/runtime.h:40-341
+}
+
+class HostModule {
+  -HostFunctionList: vector<const NativeFuncDesc*>
+  -MainModDesc: BuiltinModuleDesc*
+  -_vnmi_env: VNMIEnvInternal
+  -HostModMap: unordered_map<const BuiltinModuleDesc*, const NativeFuncDesc*>
+  +newModule(RT: Runtime&, ModDesc: BuiltinModuleDesc*): HostModuleUniquePtr
+  +getHostFuntionList(): vector<const NativeFuncDesc*>&
+  +getNumHostFunctions(): uint32_t
+  +getVNMIEnv(): VNMIEnv*
+  +getModuleDesc(): BuiltinModuleDesc*
+  +addFunctions(HostModDesc: BuiltinModuleDesc*, HostFuncDescs: NativeFuncDesc*, NumFunctions: uint32_t): void
+  +filterFunctions(WhiteList: vector<StringView>): bool
+  +getMemAllocator(): SysMemPool*
+  +getSymbolPool(): ConstStringPool*
+  ' src/runtime/module.h:150-200
+}
+
+class Module {
+  -CodeHolder: CodeHolderUniquePtr
+  -TypeSection: vector<TypeEntry>
+  -ImportSection: vector<ImportEntry>
+  -FunctionSection: vector<FunctionEntry>
+  -TableSection: vector<TableEntry>
+  -MemorySection: vector<MemoryEntry>
+  -GlobalSection: vector<GlobalEntry>
+  -ExportSection: vector<ExportEntry>
+  -StartSection: uint32_t
+  -ElementSection: vector<ElementEntry>
+  -DataSection: vector<DataEntry>
+  -FunctionBodies: vector<FunctionBody>
+  -Layout: InstanceLayout
+  -NumImportFunctions: uint32_t
+  -NumInternalFunctions: uint32_t
+  -NumImportGlobals: uint32_t
+  -NumInternalGlobals: uint32_t
+  -NumImportTables: uint32_t
+  -NumInternalTables: uint32_t
+  -NumImportMemories: uint32_t
+  -NumInternalMemories: uint32_t
+  -GasFuncIdx: uint32_t
+  -JITCode: void*
+  -JITCodeSize: size_t
+  -JITCodeMemPool: CodeMemPool
+  -EntryHint: string
+  +newModule(RT: Runtime&, CodeHolder: CodeHolderUniquePtr, EntryHint: string): ModuleUniquePtr
+  +releaseMemoryAllocatorCache(): void
+  +getWASMBytecode(): const uint8_t*
+  +getNumImportFunctions(): uint32_t
+  +getNumInternalFunctions(): uint32_t
+  +getNumTotalFunctions(): uint32_t
+  +getNumImportGlobals(): uint32_t
+  +getNumInternalGlobals(): uint32_t
+  +getNumTotalGlobals(): uint32_t
+  +getNumImportTables(): uint32_t
+  +getNumInternalTables(): uint32_t
+  +getNumTotalTables(): uint32_t
+  +getNumImportMemories(): uint32_t
+  +getNumInternalMemories(): uint32_t
+  +getNumTotalMemories(): uint32_t
+  +getLayout(): const InstanceLayout&
+  +getGasFuncIdx(): uint32_t
+  +getMemoryAllocator(): WasmMemoryAllocator*
+  +checkUseSoftLinearMemoryCheck(): bool
+  ' src/runtime/module.h:300-500
+}
+
+
+
+class MayBe<T> {
+  -Value: T
+  -Err: Error
+  -HasValue: bool
+  +MayBe(value: T)
+  +MayBe(error: Error)
+  +getError(): Error&
+  +operator*(): T&
+  +operator bool(): bool
+  ' src/common/errors.h
+}
+
+class Isolation {
+  -WniEnv: WNIEnvInternal
+  -InstancePool: unordered_map<Instance*, InstanceUniquePtr>
+  +newIsolation(RT: Runtime&): IsolationUniquePtr
+  +createInstance(Mod: Module&, GasLimit: uint64_t): MayBe<Instance*>
+  +deleteInstance(Inst: Instance*): bool
+  +initWasi(): bool
+  +initNativeModuleCtx(ModName: WASMSymbol): bool
+  ' src/runtime/isolation.h:15-50
+}
+
+class Instance {
+  -Iso: Isolation*
+  -Mod: Module*
+  -NumTotalGlobals: uint32_t
+  -NumTotalMemories: uint32_t
+  -NumTotalTables: uint32_t
+  -NumTotalFunctions: uint32_t
+  -Functions: FunctionInstance*
+  -Globals: GlobalInstance*
+  -GlobalVarData: uint8_t*
+  -Tables: TableInstance*
+  -Memories: MemoryInstance*
+  -GasLimit: uint64_t
+  -GasUsed: uint64_t
+  -Error: Error
+  -StackCost: uint32_t
+  -InHostAPI: int8_t
+  -CustomData: void*
+  -MemDataKind: WasmMemoryDataType
+  -DataSegsInited: bool
+  +newInstance(Iso: Isolation&, Mod: Module&, GasLimit: uint64_t): InstanceUniquePtr
+  +getModule(): const Module*
+  +getFunctionInst(FuncIdx: uint32_t): FunctionInstance*
+  +getTableInst(TableIdx: uint32_t): TableInstance*
+  +hasMemory(): bool
+  +getDefaultMemoryInst(): MemoryInstance&
+  +getGlobalInst(GlobalIdx: uint32_t): GlobalInstance*
+  +getGlobalVarData(): uint8_t*
+  +getGlobalValue(GlobalIdx: uint32_t): TypedValue
+  +setGlobalValue(GlobalIdx: uint32_t, Value: TypedValue): bool
+  +getError(): Error&
+  +setExecutionError(Code: ErrorCode, Msg: string): void
+  +getWasmMemoryAllocator(): WasmMemoryAllocator*
+  +protectMemory(): void
+  ' src/runtime/instance.h:100-300
+}
+
+class TypedValue {
+  +Type: WASMType
+  +Value: union { I32: int32_t, I64: int64_t, F32: float, F64: double }
+  +TypedValue()
+  +TypedValue(type: WASMType, value: int32_t/int64_t/float/double)
+  +getI32(): int32_t
+  +getI64(): int64_t
+  +getF32(): float
+  +getF64(): double
+  +toString(): string
+  +isNumber(): bool
+  +isInteger(): bool
+  +isFloat(): bool
+  ' src/common/type.h
+}
+
+' 定义关系
+CLI::App --> RuntimeConfig : 配置 >
+RuntimeConfig --> Runtime : 初始化 >
+Runtime --> HostModule : 加载 >
+Runtime --> Module : 加载 >
+Runtime --> Isolation : 创建 >
+Module --> MayBe : 返回 >
+Isolation --> MayBe : 返回 >
+Isolation --> Instance : 创建 >
+Instance --> TypedValue : 返回 >
+
+' 添加注释
+'note right of CLI::App
+'  命令行解析器，用于解析和处理命令行参数
+'  src/cli/dtvm.cpp:55-58
+'end note
+
+note right of RuntimeConfig
+  运行时配置，包含多种配置选项，如运行模式、
+  内存映射、统计功能等
+  src/runtime/config.h
+end note
+
+note right of Runtime
+  运行时环境，DTVM的核心组件，负责管理
+  模块加载、实例化和执行
+  src/runtime/runtime.h
+end note
+
+note right of HostModule
+  主机模块，提供WebAssembly与主机环境
+  交互的接口，如WASI和环境模块
+  src/runtime/module.h
+end note
+
+note right of Module
+  WebAssembly模块，表示加载的模块，
+  包含类型、函数、内存、表等信息
+  src/runtime/module.h
+end note
+
+note right of MayBe
+  结果包装器，包含操作结果或错误信息
+  src/common/errors.h
+end note
+
+note right of Isolation
+  隔离环境，提供执行隔离，确保不同
+  WebAssembly实例之间相互隔离
+  src/runtime/isolation.h
+end note
+
+note right of Instance
+  WebAssembly实例，表示实例化的模块，
+  包含运行时状态，如内存、全局变量等
+  src/runtime/instance.h
+end note
+
+note right of TypedValue
+  类型化值，表示WebAssembly函数的
+  参数和返回值
+  src/common/type.h
+end note
+
+@enduml

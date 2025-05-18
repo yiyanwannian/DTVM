@@ -1,0 +1,97 @@
+@startuml DTVM隔离环境安全模型
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  ComponentBackgroundColor #ECF0F1
+  ComponentBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义组件
+package "DTVM安全模型" {
+  component "隔离环境 (Isolation)" as Isolation {
+    component "实例隔离" as InstanceIsolation {
+      [独立的实例池]
+      [独立的WNI环境]
+    }
+    
+    component "内存隔离" as MemoryIsolation {
+      [内存桶模式]
+      [内存保护机制]
+      [地址边界检查]
+    }
+    
+    component "资源限制" as ResourceLimit {
+      [Gas计量]
+      [内存页面限制]
+      [调用栈深度限制]
+    }
+    
+    component "主机函数控制" as HostFunctionControl {
+      [函数导入验证]
+      [主机模块上下文]
+      [权限检查]
+    }
+  }
+  
+  component "WebAssembly实例" as Instance1 {
+    [线性内存1]
+    [函数表1]
+    [全局变量1]
+  }
+  
+  component "WebAssembly实例" as Instance2 {
+    [线性内存2]
+    [函数表2]
+    [全局变量2]
+  }
+  
+  component "主机环境" as HostEnv {
+    [文件系统]
+    [网络]
+    [系统资源]
+  }
+}
+
+' 定义关系
+Isolation --> Instance1 : 管理
+Isolation --> Instance2 : 管理
+Instance1 --> HostEnv : 受控访问
+Instance2 --> HostEnv : 受控访问
+
+' 添加注释
+note right of InstanceIsolation
+  实例隔离确保不同的WebAssembly实例
+  之间相互隔离，防止一个实例影响另一个实例
+end note
+
+note right of MemoryIsolation
+  内存隔离通过内存桶模式和内存保护机制，
+  确保WebAssembly实例只能访问自己的内存空间
+end note
+
+note right of ResourceLimit
+  资源限制通过Gas计量和内存页面限制，
+  防止WebAssembly实例无限消耗资源
+end note
+
+note right of HostFunctionControl
+  主机函数控制确保WebAssembly实例
+  只能调用允许的主机函数，并进行权限检查
+end note
+
+note bottom of Instance1
+  每个WebAssembly实例都有自己的
+  线性内存、函数表和全局变量，
+  与其他实例完全隔离
+end note
+
+note bottom of HostEnv
+  WebAssembly实例只能通过受控的接口
+  访问主机环境，确保安全性
+end note
+
+@enduml

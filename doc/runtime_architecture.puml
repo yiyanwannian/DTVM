@@ -1,0 +1,100 @@
+@startuml DTVM Runtime架构图
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  ComponentBackgroundColor #ECF0F1
+  ComponentBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义组件
+package "DTVM Runtime" {
+  component "Runtime" as Runtime
+  component "Isolation" as Isolation
+  component "Module" as Module
+  component "Instance" as Instance
+  component "Memory" as Memory
+  component "VNMI" as VNMI
+  component "WNI" as WNI
+  component "CodeHolder" as CodeHolder
+  component "HostModule" as HostModule
+}
+
+' 定义外部组件
+component "WebAssembly模块" as WasmModule
+component "主机模块" as HostEnv
+component "JIT编译器" as JIT
+
+' 定义关系
+Runtime --> Isolation : 创建和管理
+Runtime --> Module : 加载
+Runtime --> HostModule : 加载
+Isolation --> Instance : 创建和管理
+Instance --> Module : 关联
+Instance --> Memory : 使用
+Module --> CodeHolder : 包含
+Runtime --> VNMI : 提供接口
+Instance --> WNI : 提供接口
+WasmModule --> Runtime : 加载到
+HostEnv --> VNMI : 通过接口交互
+HostEnv --> WNI : 通过接口交互
+Module --> JIT : 编译
+
+' 添加注释
+note right of Runtime
+  运行时环境，管理整个虚拟机的生命周期
+  - 创建和管理隔离环境
+  - 加载WebAssembly模块
+  - 加载主机模块
+  - 管理内存和符号
+  - 提供WebAssembly函数调用接口
+end note
+
+note right of Isolation
+  隔离环境，提供WebAssembly实例的隔离执行
+  - 创建和管理WebAssembly实例
+  - 提供实例间的隔离
+  - 初始化WASI环境
+end note
+
+note right of Module
+  模块，表示加载的WebAssembly模块
+  - 存储WebAssembly模块的代码和数据
+  - 管理导入和导出函数
+  - 管理类型、函数、表、内存和全局变量
+end note
+
+note right of Instance
+  实例，表示WebAssembly模块的运行实例
+  - 存储实例的运行时状态
+  - 管理函数、表、内存和全局变量实例
+  - 执行WebAssembly代码
+end note
+
+note right of Memory
+  内存管理，负责WebAssembly线性内存的分配和管理
+  - 分配和管理WebAssembly线性内存
+  - 支持内存增长
+  - 提供内存保护
+  - 支持内存桶模式
+end note
+
+note right of VNMI
+  虚拟机原生接口，提供与主机环境的交互
+  - 提供内存分配和释放
+  - 提供符号管理
+  - 连接Runtime和主机模块
+end note
+
+note right of WNI
+  WebAssembly原生接口，提供与主机环境的交互
+  - 提供地址转换
+  - 提供地址验证
+  - 提供异常处理
+  - 提供上下文管理
+end note
+
+@enduml

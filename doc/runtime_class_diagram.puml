@@ -1,0 +1,176 @@
+@startuml DTVM Runtime类图
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  ClassBackgroundColor #ECF0F1
+  ClassBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义类
+class Runtime {
+  -MemPool: common::SysMemPool
+  -SymbolPool: common::ConstStringPool
+  -HostModulePool: unordered_map<WASMSymbol, HostModuleUniquePtr>
+  -ModulePool: unordered_map<WASMSymbol, ModuleUniquePtr>
+  -Isolations: unordered_map<Isolation*, IsolationUniquePtr>
+  -VMMaxMemPages: uint32_t
+  -Config: RuntimeConfig
+  -Stats: utils::Statistics
+  +newRuntime(Config: RuntimeConfig): unique_ptr<Runtime>
+  +loadModule(Filename: string): MayBe<Module*>
+  +unloadModule(Mod: Module*): bool
+  +createManagedIsolation(): Isolation*
+  +deleteManagedIsolation(Iso: Isolation*): bool
+  +callWasmFunction(Inst: Instance&, FuncIdx: uint32_t, Args: vector<TypedValue>, Results: vector<TypedValue>): bool
+  +allocate(Size: size_t, Align: size_t): void*
+  +deallocate(Ptr: void*): void
+  +newSymbol(Str: char*, Len: size_t): WASMSymbol
+  +freeSymbol(Symbol: WASMSymbol): void
+}
+
+class Isolation {
+  -WniEnv: WNIEnvInternal
+  -InstancePool: unordered_map<Instance*, InstanceUniquePtr>
+  +newIsolation(RT: Runtime&): IsolationUniquePtr
+  +createInstance(Mod: Module&, GasLimit: uint64_t): MayBe<Instance*>
+  +deleteInstance(Inst: Instance*): bool
+  +initWasi(): bool
+  +initNativeModuleCtx(ModName: WASMSymbol): bool
+}
+
+class Module {
+  -Name: WASMSymbol
+  -CodeHolder: CodeHolderUniquePtr
+  -TypeTable: TypeEntry*
+  -NumTypes: uint32_t
+  -ImportFunctionTable: ImportFunctionEntry*
+  -NumImportFunctions: uint32_t
+  -InternalFunctionTable: InternalFunctionEntry*
+  -NumInternalFunctions: uint32_t
+  -ImportTableTable: ImportTableEntry*
+  -NumImportTables: uint32_t
+  -InternalTableTable: InternalTableEntry*
+  -NumInternalTables: uint32_t
+  -ImportMemoryTable: ImportMemoryEntry*
+  -NumImportMemories: uint32_t
+  -InternalMemoryTable: InternalMemoryEntry*
+  -NumInternalMemories: uint32_t
+  -ImportGlobalTable: ImportGlobalEntry*
+  -NumImportGlobals: uint32_t
+  -InternalGlobalTable: InternalGlobalEntry*
+  -NumInternalGlobals: uint32_t
+  -ExportTable: ExportEntry*
+  -NumExports: uint32_t
+  -ElemTable: ElemEntry*
+  -NumElems: uint32_t
+  -DataTable: DataEntry*
+  -NumDatas: uint32_t
+  -CodeTable: CodeEntry*
+  -NumCodes: uint32_t
+  -GlobalVarSize: uint32_t
+  -Layout: InstanceLayout
+  +newModule(RT: Runtime&, CodeHolder: CodeHolderUniquePtr): ModuleUniquePtr
+  +getExportFunc(Name: string, FuncIdx: uint32_t&): bool
+  +getImportFunc(ModName: string, FuncName: string, FuncIdx: uint32_t&): bool
+  +getFunctionType(FuncIdx: uint32_t): TypeEntry*
+  +getLayout(): InstanceLayout&
+}
+
+class Instance {
+  -Iso: Isolation*
+  -Mod: Module*
+  -NumTotalGlobals: uint32_t
+  -NumTotalMemories: uint32_t
+  -NumTotalTables: uint32_t
+  -NumTotalFunctions: uint32_t
+  -Functions: FunctionInstance*
+  -Globals: GlobalInstance*
+  -GlobalVarData: uint8_t*
+  -Tables: TableInstance*
+  -Memories: MemoryInstance*
+  -GasLimit: uint64_t
+  -GasUsed: uint64_t
+  -Error: Error
+  -MemDataKind: WasmMemoryDataType
+  +newInstance(Iso: Isolation&, Mod: Module&, GasLimit: uint64_t): InstanceUniquePtr
+  +getFunctionInst(FuncIdx: uint32_t): FunctionInstance*
+  +getTableInst(TableIdx: uint32_t): TableInstance*
+  +getMemoryInst(MemIdx: uint32_t): MemoryInstance*
+  +getGlobalInst(GlobalIdx: uint32_t): GlobalInstance*
+  +getDefaultMemoryInst(): MemoryInstance&
+  +growMemory(MemIdx: uint32_t, NewPages: uint32_t): bool
+  +protectMemory(): void
+  +setError(Err: Error): void
+  +getError(): Error&
+}
+
+class WasmMemoryAllocator {
+  -CurModule: Module*
+  -CurRuntime: Runtime*
+  -DefaultMemoryType: WasmMemoryDataType
+  -UseMmap: bool
+  -MmapMemoryInitFileSize: size_t
+  -MmapMemoryBucketGrowMaxSize: size_t
+  -MmapBucketSize: size_t
+  -MmapBucketItemSize: size_t
+  -BucketLock: Mutex
+  -ActiveBuckets: unordered_map<uint8_t*, shared_ptr<MmapBucketInstance>>
+  -BucketInstanceForAllocate: MmapBucketInstance*
+  +allocInitWasmMemory(BucketAllocSand: uint8_t*, MemorySize: size_t, ThisInstanceUseMmap: bool): WasmMemoryData
+  +enlargeWasmMemory(OldMemoryData: WasmMemoryData&, NewMemorySize: size_t): WasmMemoryData
+  +freeWasmMemory(WasmMemoryData: WasmMemoryData&): void
+  +mprotectReadWriteWasmMemoryData(Data: WasmMemoryData&, UnprotectBucket: bool): void
+}
+
+class VNMIEnvInternal {
+  +_env: VNMIEnv
+  +_runtime: Runtime*
+}
+
+class WNIEnv {
+  +_functions: WNINativeInterface*
+  +_linear_mem_base: uintptr_t
+  +_linear_mem_end: uintptr_t
+  +_linear_mem_size: uint64_t
+  +_vmctx: void*
+  +_user_defined_ctx: void*
+}
+
+class HostModule {
+  -_vnmi_env: VNMIEnvInternal
+  -MainModDesc: BuiltinModuleDesc*
+  -HostModMap: unordered_map<BuiltinModuleDesc*, NativeFuncDesc*>
+  -HostFunctionList: vector<NativeFuncDesc*>
+  +newModule(RT: Runtime&, ModDesc: BuiltinModuleDesc*): HostModuleUniquePtr
+  +getHostFuntionList(): vector<NativeFuncDesc*>&
+  +getNumHostFunctions(): uint32_t
+  +getVNMIEnv(): VNMIEnv*
+}
+
+class CodeHolder {
+  -RT: Runtime*
+  -Data: void*
+  -Size: size_t
+  +newFileCodeHolder(RT: Runtime&, Filename: string): CodeHolderUniquePtr
+  +newRawDataCodeHolder(RT: Runtime&, Data: void*, Size: size_t): CodeHolderUniquePtr
+  +getData(): void*
+  +getSize(): size_t
+}
+
+' 定义关系
+Runtime "1" *-- "0..*" Isolation : 管理
+Runtime "1" *-- "0..*" Module : 管理
+Runtime "1" *-- "0..*" HostModule : 管理
+Isolation "1" *-- "0..*" Instance : 管理
+Instance "1" o-- "1" Module : 关联
+Instance "1" o-- "1..*" WasmMemoryAllocator : 使用
+Module "1" *-- "1" CodeHolder : 包含
+Runtime "1" -- "1" VNMIEnvInternal : 提供
+Instance "1" -- "1" WNIEnv : 提供
+HostModule "1" -- "1" VNMIEnvInternal : 使用
+
+@enduml

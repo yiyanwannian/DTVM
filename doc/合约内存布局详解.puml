@@ -1,0 +1,159 @@
+@startuml 合约内存布局详解
+
+' 使用中文标题
+title DTVM合约内存布局详解
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  RectangleBackgroundColor #ECF0F1
+  RectangleBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义内存布局
+rectangle "合约实例内存布局" {
+  rectangle "Instance对象" as Instance #D5F5E3 {
+    "Iso: Isolation*                  // 指向隔离环境的指针\nMod: Module*                     // 指向模块的指针\nNumTotalGlobals: uint32_t       // 全局变量总数\nNumTotalMemories: uint32_t      // 内存实例总数\nNumTotalTables: uint32_t        // 表总数\nNumTotalFunctions: uint32_t     // 函数总数\nFunctions: FunctionInstance*    // 函数实例数组指针\nGlobals: GlobalInstance*        // 全局变量实例数组指针\nGlobalVarData: uint8_t*         // 全局变量数据指针\nTables: TableInstance*          // 表实例数组指针\nMemories: MemoryInstance*       // 内存实例数组指针\nGasLimit: uint64_t              // Gas限制\nGasUsed: uint64_t               // 已使用的Gas\nError: Error                    // 错误信息\nMemDataKind: WasmMemoryDataType // 内存数据类型"
+  }
+  
+  rectangle "FunctionInstance数组" as Functions #D5F5E3 {
+    "struct FunctionInstance {\n  uint32_t ModuleIdx;      // 模块索引\n  uint32_t TypeIdx;        // 类型索引\n  uint16_t NumParams;      // 参数数量\n  uint16_t NumReturns;     // 返回值数量\n  uint16_t NumLocals;      // 局部变量数量\n  uint16_t NumLocalCells;  // 局部变量单元数量\n  WASMType *ParamTypes;    // 参数类型数组\n  WASMType *ReturnTypes;   // 返回值类型数组\n  WASMType *LocalTypes;    // 局部变量类型数组\n  uint32_t *LocalOffsets;  // 局部变量偏移量数组\n  const uint8_t *CodePtr;  // 代码指针\n  uint32_t CodeSize;       // 代码大小\n  void *JITCodePtr;        // JIT代码指针\n};"
+  }
+  
+  rectangle "GlobalInstance数组" as Globals #D5F5E3 {
+    "struct GlobalInstance {\n  WASMType Type;    // 全局变量类型\n  bool Mutable;      // 是否可变\n  uint32_t Offset;   // 在全局变量数据中的偏移量\n};"
+  }
+  
+  rectangle "全局变量数据" as GlobalData #D5F5E3 {
+    "// 全局变量的实际值存储在这里\n// 按照GlobalInstance中的Offset访问\n// 例如：\n// 全局变量1 (I32): 0x00000001\n// 全局变量2 (I64): 0x0000000000000064\n// 全局变量3 (F32): 3.14159\n// ..."
+  }
+  
+  rectangle "TableInstance数组" as Tables #D5F5E3 {
+    "struct TableInstance {\n  uint32_t CurSize;    // 当前大小\n  uint32_t MaxSize;    // 最大大小\n  uint32_t *Elements;  // 元素数组指针\n};"
+  }
+  
+  rectangle "表元素" as TableElems #D5F5E3 {
+    "// 表元素存储函数索引\n// 用于间接函数调用(call_indirect)\n// 例如：\n// 元素0: 函数索引2\n// 元素1: 函数索引5\n// 元素2: 函数索引3\n// ..."
+  }
+  
+  rectangle "MemoryInstance数组" as Memories #D5F5E3 {
+    "struct MemoryInstance {\n  uint32_t CurPages;           // 当前页数\n  uint32_t MaxPages;           // 最大页数\n  uint64_t MemSize;            // 内存大小(字节)\n  uint8_t *MemBase;            // 内存基址\n  uint8_t *MemEnd;             // 内存结束地址\n  WasmMemoryDataType Kind;     // 内存类型\n};"
+  }
+  
+  rectangle "线性内存" as LinearMem #D5F5E3 {
+    rectangle "数据段" as DataSeg {
+      "// 从模块的数据段初始化\n// 例如：\n// 数据段1: \"Hello, World!\"\n// 数据段2: [1, 2, 3, 4, 5]"
+    }
+    
+    rectangle "堆区" as Heap {
+      "// 动态分配的内存\n// 通过memory.grow指令增长\n// 存储动态数据结构"
+    }
+    
+    rectangle "栈区" as Stack {
+      "// 函数调用栈\n// 存储局部变量和临时值"
+    }
+  }
+  
+  ' 如果启用JIT
+  rectangle "JIT相关数据" as JITData #D5F5E3 {
+    rectangle "函数指针数组" as FuncPtrs {
+      "// 存储所有函数的指针\n// 用于快速函数调用"
+    }
+    
+    rectangle "函数类型索引数组" as FuncTypeIndexes {
+      "// 存储函数类型索引\n// 用于类型检查"
+    }
+  }
+}
+
+' 添加注释
+note bottom of Instance
+  Instance对象是合约实例的核心，
+  包含所有其他组件的指针和基本信息
+end note
+
+note bottom of Functions
+  FunctionInstance数组存储所有函数的元数据，
+  包括导入函数和内部函数
+end note
+
+note bottom of Globals
+  GlobalInstance数组存储全局变量的元数据，
+  而实际值存储在全局变量数据区域
+end note
+
+note bottom of Tables
+  TableInstance数组存储表的元数据，
+  表主要用于间接函数调用(call_indirect)
+end note
+
+note bottom of Memories
+  MemoryInstance数组存储内存实例的元数据，
+  WebAssembly模块通常只有一个内存实例
+end note
+
+note bottom of LinearMem
+  线性内存是WebAssembly的主要内存空间，
+  包含数据段、堆区和栈区
+end note
+
+note bottom of JITData
+  JIT相关数据用于支持即时编译，
+  提高执行效率
+end note
+
+' 添加关系
+Instance -[hidden]-> Functions
+Functions -[hidden]-> Globals
+Globals -[hidden]-> GlobalData
+GlobalData -[hidden]-> Tables
+Tables -[hidden]-> TableElems
+TableElems -[hidden]-> Memories
+Memories -[hidden]-> LinearMem
+LinearMem -[hidden]-> JITData
+
+' 添加内存布局的偏移量
+note right of Instance
+  偏移量: 0
+  大小: InstanceSize
+end note
+
+note right of Functions
+  偏移量: InstanceSize
+  大小: FuncInstancesSize
+end note
+
+note right of Globals
+  偏移量: InstanceSize + FuncInstancesSize
+  大小: GlobalInstancesSize
+end note
+
+note right of GlobalData
+  偏移量: GlobalVarBaseOffset
+  大小: GlobalVarSize
+end note
+
+note right of Tables
+  偏移量: GlobalVarBaseOffset + GlobalVarSize
+  大小: TableInstancesSize
+end note
+
+note right of TableElems
+  偏移量: TableElemBaseOffset
+  大小: TableElemsSize
+end note
+
+note right of Memories
+  偏移量: TableElemBaseOffset + TableElemsSize
+  大小: MemoryInstancesSize
+end note
+
+note right of JITData
+  偏移量: FuncPtrsBaseOffset
+  大小: FuncPtrsSize + FuncTypeIndexesSize
+end note
+
+@enduml

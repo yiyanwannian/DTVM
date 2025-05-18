@@ -1,0 +1,109 @@
+@startuml DTVM Runtime执行流程图
+
+' 设置样式
+skinparam {
+  BackgroundColor #FFFFFF
+  ArrowColor #2C3E50
+  SequenceArrowThickness 2
+  SequenceLifeLineBorderColor #3498DB
+  SequenceLifeLineBackgroundColor #ECF0F1
+  ParticipantBackgroundColor #ECF0F1
+  ParticipantBorderColor #3498DB
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义参与者
+participant "应用程序" as App
+participant "Runtime" as Runtime
+participant "Isolation" as Isolation
+participant "Module" as Module
+participant "Instance" as Instance
+participant "Memory" as Memory
+participant "JIT编译器" as JIT
+
+' 定义序列
+App -> Runtime : 1. 创建Runtime\nnewRuntime()
+activate Runtime
+
+App -> Runtime : 2. 加载WebAssembly模块\nloadModule(filename)
+activate Runtime
+  Runtime -> Module : 2.1 创建Module\nnewModule()
+  activate Module
+    Module -> Module : 2.2 加载WebAssembly代码
+    Module -> Module : 2.3 解析模块结构
+    Module -> Module : 2.4 计算实例布局\nLayout.compute()
+    Module -> JIT : 2.5 编译WebAssembly函数
+    activate JIT
+      JIT --> Module : 返回编译结果
+    deactivate JIT
+    Module --> Runtime : 返回Module实例
+  deactivate Module
+  Runtime --> App : 返回Module指针
+deactivate Runtime
+
+App -> Runtime : 3. 创建隔离环境\ncreateManagedIsolation()
+activate Runtime
+  Runtime -> Isolation : 3.1 创建Isolation\nnewIsolation()
+  activate Isolation
+    Isolation --> Runtime : 返回Isolation实例
+  deactivate Isolation
+  Runtime --> App : 返回Isolation指针
+deactivate Runtime
+
+App -> Isolation : 4. 创建WebAssembly实例\ncreateInstance(module, gasLimit)
+activate Isolation
+  Isolation -> Instance : 4.1 创建Instance\nnewInstance()
+  activate Instance
+    Instance -> Module : 4.2 获取实例布局\ngetLayout()
+    Module --> Instance : 返回实例布局
+    Instance -> Instance : 4.3 分配实例内存
+    Instance -> Memory : 4.4 初始化内存\nallocInitWasmMemory()
+    activate Memory
+      Memory --> Instance : 返回内存数据
+    deactivate Memory
+    Instance -> Instance : 4.5 初始化函数、表、全局变量
+    Instance --> Isolation : 返回Instance实例
+  deactivate Instance
+  Isolation -> Isolation : 4.6 设置WNI环境
+  Isolation --> App : 返回Instance指针
+deactivate Isolation
+
+App -> Runtime : 5. 调用WebAssembly函数\ncallWasmFunction(instance, funcIdx, args, results)
+activate Runtime
+  Runtime -> Runtime : 5.1 检查参数和返回值类型
+  
+  alt 解释器模式
+    Runtime -> Runtime : 5.2a 调用解释器\ncallWasmFunctionInInterpMode()
+    activate Runtime
+      Runtime -> Instance : 5.3a 创建解释器栈和上下文
+      Runtime -> Instance : 5.4a 执行WebAssembly代码
+      Instance --> Runtime : 返回执行结果
+    deactivate Runtime
+  else JIT模式
+    Runtime -> Runtime : 5.2b 调用JIT编译的代码\ncallWasmFunctionInJITMode()
+    activate Runtime
+      Runtime -> Instance : 5.3b 获取JIT编译的函数指针
+      Runtime -> Instance : 5.4b 执行本地代码
+      Instance --> Runtime : 返回执行结果
+    deactivate Runtime
+  end
+  
+  Runtime --> App : 返回执行结果
+deactivate Runtime
+
+App -> Runtime : 6. 销毁资源
+activate Runtime
+  Runtime -> Isolation : 6.1 删除实例\ndeleteInstance()
+  Isolation -> Instance : 6.2 销毁实例
+  activate Instance
+    Instance -> Memory : 6.3 释放内存\nfreeWasmMemory()
+    Instance --> Isolation : 实例销毁完成
+  deactivate Instance
+  Isolation --> Runtime : 实例删除完成
+  Runtime -> Runtime : 6.4 删除隔离环境\ndeleteManagedIsolation()
+  Runtime -> Runtime : 6.5 卸载模块\nunloadModule()
+  Runtime --> App : 资源销毁完成
+deactivate Runtime
+
+@enduml

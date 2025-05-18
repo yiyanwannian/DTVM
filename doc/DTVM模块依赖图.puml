@@ -1,0 +1,164 @@
+@startuml DTVM模块依赖图
+
+' 使用中文标题
+title DTVM模块依赖图
+
+' 设置样式
+skinparam {
+  ArrowColor #2C3E50
+  BackgroundColor #FFFFFF
+  PackageBackgroundColor #ECF0F1
+  PackageBorderColor #3498DB
+  ComponentBackgroundColor #F8F9FA
+  ComponentBorderColor #2980B9
+  NoteBackgroundColor #E8F8F5
+  NoteBorderColor #16A085
+}
+
+' 定义包和组件
+package "src" {
+  package "entrypoint" as Entrypoint {
+    [C API接口 (zetaengine-c.h)] as CAPI
+    [架构特定代码 (arch/)] as ArchSpecific
+  }
+
+  package "runtime" as Runtime {
+    [运行时核心 (runtime.h)] as RuntimeCore
+    [模块管理 (module.h)] as ModuleManagement
+    [实例管理 (instance.h)] as InstanceManagement
+    [内存管理 (memory.h)] as MemoryManagement
+  }
+
+  package "compiler" {
+    [编译器前端 (frontend/)] as CompilerFrontend
+    [中间表示 (mir/ir.h)] as IR
+    [编译器后端 (backend.h)] as CompilerBackend
+    [优化器 (mir/optimizer.h)] as Optimizer
+  }
+
+  package "singlepass" as Singlepass {
+    [x64代码生成 (x64/codegen.h)] as X64CodeGen
+    [ARM64代码生成 (a64/codegen.h)] as ARM64CodeGen
+    [通用代码生成 (common/codegen.h)] as CommonCodeGen
+  }
+
+  package "host" as Host {
+    [环境模块 (env/env_module.h)] as EnvModule
+    [WASI模块 (wasi/wasi_module.h)] as WASIModule
+    [测试模块 (spectest/spectest_module.h)] as SpectestModule
+  }
+
+  package "platform" as Platform {
+    [POSIX实现 (posix/)] as POSIXImpl
+    [SGX实现 (sgx/)] as SGXImpl
+  }
+
+  package "common" as Common {
+    [通用工具 (common/utils.h)] as CommonUtils
+    [WebAssembly定义 (wasm_defs/)] as WasmDefs
+  }
+
+  package "utils" as Utils {
+    [日志系统 (utils/log.h)] as LogSystem
+    [错误处理 (utils/error.h)] as ErrorHandling
+    [内存工具 (utils/memory.h)] as MemoryUtils
+  }
+}
+
+package "rust_crate" as RustCrate {
+  [Rust核心接口 (src/core/)] as RustCore
+  [Rust类型定义 (src/core/types.rs)] as RustTypes
+  [Rust示例 (rust_example/)] as RustExample
+}
+
+package "third_party" as ThirdParty {
+  [AsmJit (third_party/asmjit)] as AsmJit
+  [CLI11 (third_party/CLI11)] as CLI11
+  [spdlog (third_party/spdlog)] as Spdlog
+}
+
+' 定义依赖关系
+CAPI --> RuntimeCore
+CAPI --> ArchSpecific
+
+RuntimeCore --> ModuleManagement
+RuntimeCore --> InstanceManagement
+RuntimeCore --> MemoryManagement
+RuntimeCore --> CompilerFrontend
+RuntimeCore --> Host
+RuntimeCore --> Platform
+
+ModuleManagement --> WasmDefs
+InstanceManagement --> MemoryManagement
+InstanceManagement --> Host
+
+CompilerFrontend --> IR
+CompilerFrontend --> WasmDefs
+IR --> CompilerBackend
+CompilerBackend --> Optimizer
+CompilerBackend --> Singlepass
+
+X64CodeGen --> CommonCodeGen
+ARM64CodeGen --> CommonCodeGen
+CommonCodeGen --> AsmJit
+
+EnvModule --> RuntimeCore
+WASIModule --> RuntimeCore
+SpectestModule --> RuntimeCore
+
+POSIXImpl --> CommonUtils
+SGXImpl --> CommonUtils
+
+RuntimeCore --> LogSystem
+RuntimeCore --> ErrorHandling
+MemoryManagement --> MemoryUtils
+
+RustCore --> CAPI
+RustTypes --> CAPI
+RustExample --> RustCore
+
+LogSystem --> Spdlog
+CAPI --> CLI11
+
+' 添加注释
+note right of Entrypoint
+  入口点模块提供C API接口，
+  是其他语言绑定的基础
+end note
+
+note right of Runtime
+  运行时模块是DTVM的核心，
+  负责模块加载和执行
+end note
+
+note right of compiler
+  编译器模块将WebAssembly
+  编译为可执行代码
+end note
+
+note right of Singlepass
+  单通道编译器支持多种
+  目标架构的代码生成
+end note
+
+note right of Host
+  主机模块提供WebAssembly
+  与主机环境的交互接口
+end note
+
+note right of Platform
+  平台模块提供跨平台抽象，
+  支持不同操作系统和硬件
+end note
+
+note right of RustCrate
+  Rust绑定提供Rust语言接口，
+  封装C API功能
+end note
+
+note right of ThirdParty
+  第三方库提供辅助功能，
+  如代码生成、日志等
+end note
+
+@enduml
