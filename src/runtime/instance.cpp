@@ -28,68 +28,70 @@ WasmMemoryData MemoryInstance::getWasmMemoryData() {
 
 // If you want to modify this function, please make sure that you have
 // understood the alignment requirements
+// 如果要修改此函数，请确保您已理解内存对齐要求
 void Module::InstanceLayout::compute() {
-  const uint32_t NumFunctions = Mod.getNumTotalFunctions();
-  const uint32_t NumGlobals = Mod.getNumTotalGlobals();
-  const uint32_t NumTables = Mod.getNumTotalTables();
-  const uint32_t NumMemories = Mod.getNumTotalMemories();
+  const uint32_t NumFunctions = Mod.getNumTotalFunctions();    // 获取函数总数（导入+内部）
+  const uint32_t NumGlobals = Mod.getNumTotalGlobals();        // 获取全局变量总数
+  const uint32_t NumTables = Mod.getNumTotalTables();          // 获取表总数
+  const uint32_t NumMemories = Mod.getNumTotalMemories();      // 获取内存总数
 
-  InstanceSize = ZEN_ALIGN(sizeof(Instance), Alignment);
+  InstanceSize = ZEN_ALIGN(sizeof(Instance), Alignment);       // 计算Instance对象本身的大小（按对齐要求对齐）
   FuncInstancesSize =
-      ZEN_ALIGN(sizeof(FunctionInstance) * NumFunctions, Alignment);
+      ZEN_ALIGN(sizeof(FunctionInstance) * NumFunctions, Alignment);  // 计算函数实例数组的大小
   GlobalInstancesSize =
-      ZEN_ALIGN(sizeof(GlobalInstance) * NumGlobals, Alignment);
-  GlobalVarSize = ZEN_ALIGN(Mod.GlobalVarSize, Alignment);
-  TableInstancesSize = ZEN_ALIGN(sizeof(TableInstance) * NumTables, Alignment);
-  TableElemsSize = 0;
-  for (size_t I = 0; I < Mod.NumImportTables; ++I) {
-    TableElemsSize += Mod.ImportTableTable[I].InitSize * sizeof(uint32_t);
+      ZEN_ALIGN(sizeof(GlobalInstance) * NumGlobals, Alignment);       // 计算全局变量实例数组的大小
+  GlobalVarSize = ZEN_ALIGN(Mod.GlobalVarSize, Alignment);     // 计算全局变量数据区的大小
+  TableInstancesSize = ZEN_ALIGN(sizeof(TableInstance) * NumTables, Alignment);  // 计算表实例数组的大小
+  TableElemsSize = 0;                                          // 初始化表元素数据总大小
+  for (size_t I = 0; I < Mod.NumImportTables; ++I) {          // 遍历所有导入表
+    TableElemsSize += Mod.ImportTableTable[I].InitSize * sizeof(uint32_t);  // 累加导入表的初始大小
   }
-  for (size_t I = 0; I < Mod.NumInternalTables; ++I) {
-    TableElemsSize += Mod.InternalTableTable[I].InitSize * sizeof(uint32_t);
+  for (size_t I = 0; I < Mod.NumInternalTables; ++I) {        // 遍历所有内部表
+    TableElemsSize += Mod.InternalTableTable[I].InitSize * sizeof(uint32_t);  // 累加内部表的初始大小
   }
-  TableElemsSize = ZEN_ALIGN(TableElemsSize, Alignment);
+  TableElemsSize = ZEN_ALIGN(TableElemsSize, Alignment);       // 对表元素数据大小进行对齐
   // at least malloc one memory instance after Instance object
   // because callNative.S will visit Instance::MemoryInstance::_memory_base
+  // 至少分配一个内存实例，因为callNative.S会访问Instance::MemoryInstance::_memory_base
   MemoryInstancesSize = ZEN_ALIGN(
-      sizeof(MemoryInstance) * (NumMemories > 0 ? NumMemories : 1), Alignment);
+      sizeof(MemoryInstance) * (NumMemories > 0 ? NumMemories : 1), Alignment);  // 计算内存实例数组的大小
 
   TotalSize = InstanceSize + FuncInstancesSize + GlobalInstancesSize +
               GlobalVarSize + TableInstancesSize + TableElemsSize +
-              MemoryInstancesSize;
+              MemoryInstancesSize;                             // 计算实例的总大小（不包括JIT相关部分）
 
-  GlobalVarBaseOffset = InstanceSize + FuncInstancesSize + GlobalInstancesSize;
+  GlobalVarBaseOffset = InstanceSize + FuncInstancesSize + GlobalInstancesSize;  // 计算全局变量数据区的起始偏移量
   TableElemBaseOffset =
-      GlobalVarBaseOffset + GlobalVarSize + TableInstancesSize;
+      GlobalVarBaseOffset + GlobalVarSize + TableInstancesSize;  // 计算表元素数据区的起始偏移量
   TableElemSizeOffset =
-      GlobalVarBaseOffset + GlobalVarSize + offsetof(TableInstance, CurSize);
+      GlobalVarBaseOffset + GlobalVarSize + offsetof(TableInstance, CurSize);  // 计算表当前大小字段的偏移量
 
-  size_t MemoryInstanceOffset = TableElemBaseOffset + TableElemsSize;
-  MemoryBaseOffset = MemoryInstanceOffset + offsetof(MemoryInstance, MemBase);
-  MemorySizeOffset = MemoryInstanceOffset + offsetof(MemoryInstance, MemSize);
-  MemoryPagesOffset = MemoryInstanceOffset + offsetof(MemoryInstance, CurPages);
+  size_t MemoryInstanceOffset = TableElemBaseOffset + TableElemsSize;  // 计算内存实例的起始偏移量
+  MemoryBaseOffset = MemoryInstanceOffset + offsetof(MemoryInstance, MemBase);  // 计算内存基地址字段的偏移量
+  MemorySizeOffset = MemoryInstanceOffset + offsetof(MemoryInstance, MemSize);  // 计算内存大小字段的偏移量
+  MemoryPagesOffset = MemoryInstanceOffset + offsetof(MemoryInstance, CurPages);  // 计算内存页数字段的偏移量
 
 #ifdef ZEN_ENABLE_JIT
-  FuncPtrsSize = ZEN_ALIGN(NumFunctions * sizeof(uintptr_t), Alignment);
-  FuncTypeIndexesSize = ZEN_ALIGN(NumFunctions * sizeof(uint32_t), Alignment);
-  TotalSize += FuncPtrsSize + FuncTypeIndexesSize;
+  FuncPtrsSize = ZEN_ALIGN(NumFunctions * sizeof(uintptr_t), Alignment);  // 计算函数指针数组的大小
+  FuncTypeIndexesSize = ZEN_ALIGN(NumFunctions * sizeof(uint32_t), Alignment);  // 计算函数类型索引数组的大小
+  TotalSize += FuncPtrsSize + FuncTypeIndexesSize;            // 将JIT相关大小加入总大小
 
   FuncPtrsBaseOffset =
-      TableElemBaseOffset + TableElemsSize + MemoryInstancesSize;
-  FuncTypeIndexesBaseOffset = FuncPtrsBaseOffset + FuncPtrsSize;
+      TableElemBaseOffset + TableElemsSize + MemoryInstancesSize;  // 计算函数指针数组的起始偏移量
+  FuncTypeIndexesBaseOffset = FuncPtrsBaseOffset + FuncPtrsSize;  // 计算函数类型索引数组的起始偏移量
 
-  StackBoundaryOffset = offsetof(Instance, JITStackBoundary);
+  StackBoundaryOffset = offsetof(Instance, JITStackBoundary);  // 计算JIT栈边界字段的偏移量
 #ifdef ZEN_ENABLE_DUMP_CALL_STACK
-  TracesSize = ZEN_ALIGN(MAX_TRACE_LENGTH * sizeof(uint32_t), Alignment);
-  TotalSize += TracesSize;
+  TracesSize = ZEN_ALIGN(MAX_TRACE_LENGTH * sizeof(uint32_t), Alignment);  // 计算跟踪数组的大小
+  TotalSize += TracesSize;                                     // 将跟踪数组大小加入总大小
 #endif // ZEN_ENABLE_DUMP_CALL_STACK
 #endif // ZEN_ENABLE_JIT
 
-  ExceptionOffset = offsetof(Instance, Err.ErrCode);
-  GasOffset = offsetof(Instance, Gas);
+  ExceptionOffset = offsetof(Instance, Err.ErrCode);           // 计算异常错误码字段的偏移量
+  GasOffset = offsetof(Instance, Gas);                         // 计算Gas计数器字段的偏移量
 
 #ifdef ZEN_ENABLE_DWASM
-  StackCostOffset = offsetof(Instance, StackCost);
+  StackCostOffset = offsetof(Instance, StackCost);             // 计算栈开销字段的偏移量（用于栈溢出检测）
 #endif
 }
 

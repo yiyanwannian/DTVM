@@ -1,0 +1,267 @@
+@startuml DTVM_Interpreter_Process
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Microsoft YaHei"
+skinparam defaultFontSize 11
+
+skinparam participant {
+    BackgroundColor #E8F4FD
+    BorderColor #2196F3
+    FontSize 11
+}
+
+skinparam note {
+    BackgroundColor #FFF8E1
+    BorderColor #FF9800
+    FontSize 10
+}
+
+autonumber
+
+title DTVM WebAssembly 解释器执行流程
+
+participant "Runtime" as RT
+participant "BaseInterpreterImpl" as INTERP
+participant "InterpreterExecContext" as CTX
+participant "InterpFrame" as FRAME
+participant "MemoryInstance" as MEM
+participant "FunctionInstance" as FUNC
+
+== 解释器启动 ==
+RT -> INTERP: interpret()
+note right: 主解释循环入口
+
+INTERP -> CTX: getCurFrame()
+CTX --> INTERP: 当前栈帧
+
+== 1. 执行环境初始化 ==
+INTERP -> INTERP: 初始化执行环境
+activate INTERP
+
+INTERP -> FRAME: 获取指令指针 Ip
+FRAME --> INTERP: Frame->Ip
+
+INTERP -> FRAME: 获取值栈指针 ValStackPtr
+FRAME --> INTERP: Frame->ValueStackPtr
+
+INTERP -> FRAME: 获取控制栈指针 ControlStackPtr
+FRAME --> INTERP: Frame->CtrlStackPtr
+
+INTERP -> FRAME: 获取局部变量指针 LocalPtr
+FRAME --> INTERP: Frame->LocalPtr
+
+INTERP -> CTX: getInstance()
+CTX --> INTERP: 模块实例
+
+alt 模块有内存
+    INTERP -> MEM: getDefaultMemoryInst()
+    MEM --> INTERP: 内存实例和大小
+    note right: 获取线性内存信息
+else
+    INTERP -> INTERP: Memory = nullptr
+    note right: 无内存模块
+end
+
+INTERP -> FRAME: 创建函数控制块
+note right: blockPush(LABEL_FUNCTION)
+
+== 2. 函数类型检查 ==
+alt Native函数
+    INTERP -> INTERP: callFuncInst(Native)
+    activate INTERP
+
+    INTERP -> FUNC: 准备Native函数参数
+    note right: 从值栈弹出参数
+
+    INTERP -> FUNC: callNativeGeneral()
+    FUNC --> INTERP: 执行结果
+
+    INTERP -> FRAME: 推入返回值到值栈
+    note right: 处理返回值
+
+    deactivate INTERP
+    INTERP -> INTERP: return
+else ByteCode函数
+    note right: 继续执行字节码
+end
+
+== 3. 主解释循环 ==
+loop while (Ip < IpEnd)
+    INTERP -> INTERP: 读取操作码
+    note right: Opcode = *Ip++
+
+    INTERP -> INTERP: 指令分发
+    note right: switch(Opcode)
+
+    alt 控制流指令
+        INTERP -> INTERP: UNREACHABLE
+        note right: 抛出Unreachable异常
+
+        INTERP -> INTERP: NOP
+        note right: 空操作，继续
+
+        INTERP -> INTERP: BLOCK/LOOP/IF
+        note right: 创建控制块
+
+        INTERP -> INTERP: BR/BR_IF/BR_TABLE
+        note right: 分支跳转
+
+        INTERP -> INTERP: ELSE/END
+        note right: 块结束处理
+
+    else 变量操作指令
+        INTERP -> FRAME: GET_LOCAL/SET_LOCAL
+        note right: 局部变量操作
+
+        INTERP -> CTX: GET_GLOBAL/SET_GLOBAL
+        note right: 全局变量操作
+
+    else 常量指令
+        INTERP -> FRAME: I32_CONST/I64_CONST
+        note right: 推入整数常量
+
+        INTERP -> FRAME: F32_CONST/F64_CONST
+        note right: 推入浮点常量
+
+    else 内存指令
+        INTERP -> INTERP: loadOp<T>()
+        activate INTERP
+
+        INTERP -> MEM: 检查内存边界
+        INTERP -> MEM: 从内存加载数据
+        MEM --> INTERP: 加载的值
+        INTERP -> FRAME: 推入值栈
+
+        deactivate INTERP
+
+        INTERP -> INTERP: storeOp<T>()
+        activate INTERP
+
+        INTERP -> FRAME: 从值栈弹出值和地址
+        INTERP -> MEM: 检查内存边界
+        INTERP -> MEM: 存储数据到内存
+
+        deactivate INTERP
+
+        INTERP -> MEM: MEMORY_SIZE/MEMORY_GROW
+        note right: 内存大小操作
+
+    else 算术指令
+        INTERP -> INTERP: binaryOp<T, Op>()
+        activate INTERP
+
+        INTERP -> FRAME: 弹出右操作数 RHS
+        INTERP -> FRAME: 弹出左操作数 LHS
+        INTERP -> INTERP: BinaryOpHelper<T, Op>()
+        note right: 执行二元运算
+        INTERP -> FRAME: 推入运算结果
+
+        deactivate INTERP
+
+    else 比较指令
+        INTERP -> INTERP: EQ/NE/LT/GT/LE/GE
+        note right: 比较操作
+
+        INTERP -> INTERP: EQZ
+        note right: 零值检测
+
+    else 转换指令
+        INTERP -> INTERP: truncate<T>()
+        note right: 浮点截断为整数
+
+        INTERP -> INTERP: convert<T>()
+        note right: 类型转换
+
+        INTERP -> INTERP: WRAP/EXTEND
+        note right: 整数宽度转换
+
+        INTERP -> INTERP: REINTERPRET
+        note right: 位模式重解释
+
+    else 函数调用指令
+        INTERP -> INTERP: CALL
+        activate INTERP
+
+        INTERP -> CTX: 获取函数实例
+        CTX --> INTERP: FunctionInstance
+        INTERP -> INTERP: callFuncInst()
+        note right: 直接函数调用
+
+        deactivate INTERP
+
+        INTERP -> INTERP: CALL_INDIRECT
+        activate INTERP
+
+        INTERP -> FRAME: 从值栈弹出表索引
+        INTERP -> CTX: 从表中获取函数索引
+        INTERP -> CTX: 类型检查
+        INTERP -> INTERP: callFuncInst()
+        note right: 间接函数调用
+
+        deactivate INTERP
+
+        INTERP -> INTERP: RETURN
+        note right: 函数返回
+
+    end
+
+    opt 调试模式
+        INTERP -> INTERP: ZEN_LOG_DEBUG
+        note right: 输出调试信息
+    end
+
+end
+
+== 4. 栈帧管理 ==
+group 栈帧操作
+    INTERP -> CTX: allocFrame()
+    activate CTX
+
+    CTX -> CTX: 检查栈溢出
+    note right: 栈边界检查
+
+    CTX -> CTX: 分配局部变量空间
+    CTX -> CTX: 分配栈帧结构
+    CTX -> CTX: 分配控制栈
+    CTX -> CTX: 分配值栈
+
+    CTX -> FRAME: 初始化栈帧字段
+    note right: 设置指针和边界
+
+    deactivate CTX
+
+    INTERP -> CTX: freeFrame()
+    activate CTX
+
+    CTX -> CTX: 恢复栈指针
+    CTX -> CTX: 释放栈帧空间
+    note right: 清理栈帧资源
+
+    deactivate CTX
+end
+
+== 5. 错误处理 ==
+group 异常处理
+    alt 运行时错误
+        INTERP -> INTERP: 栈溢出检测
+        note right: 检查栈边界
+
+        INTERP -> INTERP: 内存越界检测
+        note right: 检查内存访问
+
+        INTERP -> INTERP: 类型不匹配检测
+        note right: 函数调用类型检查
+
+        INTERP -> INTERP: 除零错误检测
+        note right: 算术运算检查
+
+        INTERP -> INTERP: throw Error
+        note right: 抛出异常
+    end
+end
+
+deactivate INTERP
+
+INTERP --> RT: 解释执行完成
+
+@enduml

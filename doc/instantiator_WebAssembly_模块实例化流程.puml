@@ -1,0 +1,263 @@
+@startuml DTVM_Instantiator_Process
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Microsoft YaHei"
+skinparam defaultFontSize 11
+
+skinparam participant {
+    BackgroundColor #E8F4FD
+    BorderColor #2196F3
+    FontSize 11
+}
+
+skinparam note {
+    BackgroundColor #FFF8E1
+    BorderColor #FF9800
+    FontSize 10
+}
+
+autonumber
+
+title DTVM WebAssembly 模块实例化流程
+
+participant "Runtime" as RT
+participant "Instantiator" as INST
+participant "Module" as MOD
+participant "Instance" as INS
+participant "MemoryAllocator" as MEM
+participant "WASIContext" as WASI
+
+== 实例化入口 ==
+RT -> INST: instantiate(Instance &Inst)
+note right: 主实例化函数入口
+
+== 1. 全局变量实例化 ==
+INST -> INST: instantiateGlobals(Inst)
+activate INST
+
+INST -> MOD: getNumTotalGlobals()
+MOD --> INST: 全局变量总数
+
+loop 遍历导入全局变量
+    INST -> MOD: ImportGlobalTable[i]
+    MOD --> INST: 导入全局变量定义
+    INST -> INS: 设置 GlobalInstance
+    note right: 设置偏移量、可变性、类型
+end
+
+INST -> INS: 清零全局变量数据区
+note right: memset(GlobalVarData, 0, size)
+
+loop 遍历内部全局变量
+    INST -> MOD: InternalGlobalTable[i]
+    MOD --> INST: 内部全局变量定义
+    INST -> INS: 设置 GlobalInstance
+
+    alt 初始化表达式类型
+        INST -> INST: GET_GLOBAL
+        note right: 从其他全局变量获取初始值
+    else
+        INST -> INST: 常量值
+        note right: 直接使用常量初始值
+    end
+
+    INST -> INS: 复制初始值到内存
+end
+
+deactivate INST
+
+== 2. 函数实例化 ==
+INST -> INST: instantiateFunctions(Inst)
+activate INST
+
+INST -> MOD: getNumTotalFunctions()
+MOD --> INST: 函数总数
+
+loop 遍历所有函数
+    alt 导入函数 (Native)
+        INST -> MOD: ImportFunctionTable[i]
+        MOD --> INST: 导入函数定义
+        INST -> INS: 设置 FunctionInstance
+        note right: Kind = Native\n设置函数指针
+        INST -> INS: INSERT_HOST_FUNC_PTR
+        note right: 用于调用栈转储
+    else 内部函数 (ByteCode)
+        INST -> MOD: CodeTable[i]
+        MOD --> INST: 代码条目
+        INST -> INS: 设置 FunctionInstance
+        note right: Kind = ByteCode\n设置局部变量、栈大小等
+    end
+
+    INST -> MOD: TypeTable[TypeIdx]
+    MOD --> INST: 函数类型信息
+    INST -> INS: 设置参数和返回值信息
+
+    opt JIT 编译启用
+        INST -> INS: 设置 JIT 相关信息
+        note right: FuncTypeIdxs, JITFuncPtrs
+    end
+end
+
+INST -> INST: SORT_HOST_FUNC_PTRS
+note right: 排序宿主函数指针
+
+deactivate INST
+
+== 3. 表实例化 ==
+INST -> INST: instantiateTables(Inst)
+activate INST
+
+INST -> MOD: getNumTotalTables()
+MOD --> INST: 表总数
+
+INST -> INS: 计算表元素数据起始地址
+note right: TableElemStart = Tables + TableInstancesSize
+
+loop 遍历所有表
+    alt 导入表
+        INST -> MOD: ImportTableTable[i]
+        MOD --> INST: 导入表定义
+    else 内部表
+        INST -> MOD: InternalTableTable[i]
+        MOD --> INST: 内部表定义
+    end
+
+    INST -> INS: 设置 TableInstance
+    note right: CurSize, MaxSize
+    INST -> INS: 初始化表元素为 -1
+    note right: memset(TableElemStart, -1, size)
+end
+
+loop 遍历元素段
+    INST -> MOD: ElementTable[i]
+    MOD --> INST: 元素段定义
+
+    alt 偏移量来源
+        INST -> INST: GET_GLOBAL
+        note right: 从全局变量读取偏移量
+    else
+        INST -> INST: 常量偏移量
+    end
+
+    INST -> INST: 检查边界
+    note right: 确保元素段不超出表边界
+
+    INST -> INS: 复制函数索引到表
+    note right: memcpy(Elements + Offset, FuncIdxs, size)
+end
+
+deactivate INST
+
+== 4. 内存实例化 ==
+INST -> INST: instantiateMemories(Inst)
+activate INST
+
+INST -> MOD: getNumTotalMemories()
+MOD --> INST: 内存总数
+
+INST -> INST: 检查内存数量限制
+note right: WebAssembly 1.0 只支持单个内存
+
+INST -> RT: getVmMaxMemoryPages()
+RT --> INST: 虚拟机最大内存页数
+
+loop 遍历所有内存
+    alt 导入内存
+        INST -> MOD: ImportMemoryTable[i]
+        MOD --> INST: 导入内存定义
+        INST -> INS: 设置页数限制
+        INST -> INS: 暂不分配实际内存
+        note right: MemBase = nullptr
+    else 内部内存
+        INST -> MOD: InternalMemoryTable[i]
+        MOD --> INST: 内部内存定义
+        INST -> INS: 设置页数限制
+    end
+
+    INST -> INST: checkAndUpdateMemPages()
+    note right: 验证页数不超过限制
+
+    INST -> INST: 计算总内存大小
+    note right: CurPages × DefaultBytesNumPerPage
+
+    INST -> MEM: allocInitWasmMemory()
+    MEM --> INST: WasmMemoryData
+    note right: 分配并初始化内存
+
+    INST -> INS: 设置内存实例
+    note right: MemBase, MemSize, MemEnd, Kind
+end
+
+INST -> INST: initMemoryByDataSegments(Inst)
+activate INST
+
+alt 数据段已初始化
+    INST -> INST: return
+else
+    loop 遍历数据段
+        INST -> MOD: DataTable[i]
+        MOD --> INST: 数据段定义
+
+        alt 偏移量来源
+            INST -> INST: GET_GLOBAL
+            note right: 从全局变量读取偏移量
+        else
+            INST -> INST: 常量偏移量
+        end
+
+        INST -> INST: 检查数据边界
+        note right: 确保数据段不超出内存边界
+
+        INST -> INS: 复制数据到内存
+        note right: memcpy(MemBase + Offset, Data, Size)
+    end
+
+    INST -> INS: DataSegsInited = true
+end
+
+deactivate INST
+deactivate INST
+
+== 5. WASI 实例化 (可选) ==
+opt WASI 启用且未禁用
+    INST -> INST: instantiateWasi(Inst)
+    activate INST
+
+    INST -> RT: resolveHostModule("wasi_snapshot_preview1")
+    RT --> INST: HostModule
+
+    INST -> RT: 获取 WASI 参数
+    note right: Args, Envs, Dirs, Buffers
+
+    INST -> WASI: _init_ctx_func()
+    WASI --> INST: WASIContext
+
+    INST -> INS: WASICtx = WASIContext
+
+    deactivate INST
+end
+
+== 6. 启动函数执行 ==
+INST -> MOD: getStartFuncIdx()
+MOD --> INST: 启动函数索引
+
+opt 存在启动函数
+    INST -> RT: callWasmFunction(StartFuncIdx)
+    activate RT
+
+    RT -> INS: 执行启动函数
+    INS --> RT: 执行结果
+
+    alt 执行成功
+        RT --> INST: success
+    else 执行失败
+        RT --> INST: 抛出异常
+        INST -> INST: throw Error
+    end
+
+    deactivate RT
+end
+
+INST --> RT: 实例化完成
+
+@enduml
